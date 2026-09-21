@@ -2,6 +2,7 @@ const SYMBOLS: Array<[string, string]> = [
   ['0', 'Corda solta: toque a corda sem apertar nenhuma casa.'],
   ['3', 'Qualquer número é a casa que você aperta naquela corda.'],
   ['10', 'Números de dois dígitos são casas altas, como a 10 ou a 12.'],
+  ['x', 'Corda abafada: encoste os dedos sem apertar, só para o "tec" percussivo.'],
   ['~', 'Vibrato: mantenha a nota e balance o dedo.'],
   ['/', 'Slide subindo: deslize o dedo até a casa seguinte.'],
   ['\\', 'Slide descendo: deslize o dedo para trás.'],
@@ -9,6 +10,9 @@ const SYMBOLS: Array<[string, string]> = [
   ['p', 'Pull-off: puxe o dedo para soar a casa anterior sem palhetar.'],
   ['b', 'Bend: empurre a corda para o lado até a nota subir.'],
   ['r', 'Release: solte o bend e volte à nota original.'],
+  ['t', 'Tapping: bata o dedo da mão da palhetada na casa indicada.'],
+  ['PM', 'Palm mute: apoie a lateral da mão sobre as cordas perto da ponte.'],
+  ['G', 'Letras acima da tab são cifras: o acorde que está por trás do trecho.'],
 ]
 
 export function Legend() {
@@ -31,7 +35,8 @@ export function Legend() {
 
       <p className="rounded-lg border border-accent/40 bg-accent/10 p-3 text-accent-strong">
         Atenção ao ritmo: a tablatura simples em texto normalmente não informa a duração das notas. O espaçamento
-        aqui só preserva a ordem, não o tempo exato. Use um áudio da música como referência.
+        aqui só preserva a ordem, não o tempo exato. Use um áudio da música como referência e ajuste as durações
+        no painel de ritmo.
       </p>
     </div>
   )

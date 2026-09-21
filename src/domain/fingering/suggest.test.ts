@@ -37,3 +37,26 @@ describe('suggestFingers', () => {
     expect(suggestFingers(events(wrap({ e: '--5--', B: '--5--' })), 0)).toBeNull()
   })
 })
+
+describe('suggestFingersSequence', () => {
+  it('mantém a posição da mão enquanto as notas couberem nela', async () => {
+    const { suggestFingersSequence } = await import('./suggest')
+    const seq = suggestFingersSequence(events(wrap({ B: '--5--7--8--5--' })))
+    expect(seq.map((m) => m?.get('2:5') ?? m?.get('2:7') ?? m?.get('2:8'))).toEqual([1, 3, 4, 1])
+  })
+
+  it('reancora quando a mão precisa mudar de posição', async () => {
+    const { suggestFingersSequence } = await import('./suggest')
+    const seq = suggestFingersSequence(events(wrap({ B: '--1--2--3--4--8--9--10--11--' }, 30)))
+    expect(seq[0]?.get('2:1')).toBe(1)
+    expect(seq[3]?.get('2:4')).toBe(4)
+    expect(seq[4]?.get('2:8')).toBe(1)
+    expect(seq[7]?.get('2:11')).toBe(4)
+  })
+
+  it('ignora cordas abafadas', async () => {
+    const { suggestFingersSequence } = await import('./suggest')
+    const seq = suggestFingersSequence(events(wrap({ A: '--x--' })))
+    expect(seq[0]).toBeNull()
+  })
+})

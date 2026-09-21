@@ -48,3 +48,27 @@ describe('describeEvent', () => {
     expect(describeEvent(tab.events[0]).pitches).toEqual(['2ª corda (Si): D4'])
   })
 })
+
+describe('describeEvent com símbolos adicionais e afinação', () => {
+  it('explica corda abafada', () => {
+    const tab = parseOk(wrap({ A: '--x--' }))
+    expect(describeEvent(tab.events[0]).main).toContain('5ª corda (Lá) abafada')
+    expect(describeEvent(tab.events[0]).pitches).toEqual([])
+  })
+
+  it('explica palm mute e cifra', () => {
+    const text = `  G\n${wrap({ E: '--0--' })}\nPM---`
+    const tab = parseOk(text)
+    const d = describeEvent(tab.events[0])
+    expect(d.details.some((s) => s.includes('Palm mute'))).toBe(true)
+    expect(d.chord).toBe('G')
+  })
+
+  it('usa o nome da corda conforme a afinação', async () => {
+    const { getTuning } = await import('../music/tuning')
+    const tab = parseOk(wrap({ E: '--0--' }))
+    const d = describeEvent(tab.events[0], { tuning: getTuning('drop-d'), capo: 0 })
+    expect(d.main).toBe('Toque a 6ª corda (Ré) solta.')
+    expect(d.pitches[0]).toContain('D2')
+  })
+})

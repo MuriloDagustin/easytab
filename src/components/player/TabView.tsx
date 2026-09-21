@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react'
-import type { ParsedTab, TabEvent } from '../../domain/tab/types'
+import type { ParsedTab, StringNumber, TabEvent } from '../../domain/tab/types'
 
 interface Props {
   tab: ParsedTab
   currentIndex: number
+  hardEvents: number[]
+  stringFilter: StringNumber | null
   onSelect: (index: number) => void
 }
 
@@ -30,7 +32,7 @@ function buildSegments(line: string, offset: number, events: TabEvent[]): Segmen
   return segments
 }
 
-export function TabView({ tab, currentIndex, onSelect }: Props) {
+export function TabView({ tab, currentIndex, hardEvents, stringFilter, onSelect }: Props) {
   const activeRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -43,35 +45,49 @@ export function TabView({ tab, currentIndex, onSelect }: Props) {
         {tab.blocks.map((block) => {
           const blockEvents = tab.events.filter((e) => e.blockIndex === block.index)
           return (
-            <div key={block.index} className={block.index > 0 ? 'mt-4' : ''}>
+            <div key={block.index} className={block.index > 0 ? 'mt-4' : ''} data-block>
+              {block.heading && (
+                <div className="mb-1 font-sans text-xs whitespace-normal text-muted italic" data-heading>
+                  {block.heading}
+                </div>
+              )}
+              {block.chordLine && <div className="whitespace-pre text-accent-strong">{block.chordLine}</div>}
               {block.lines.map((line, lineIndex) => {
-                const stringNumber = lineIndex + 1
+                const stringNumber = (lineIndex + 1) as StringNumber
                 const lineEvents = blockEvents.filter((e) => e.notes.some((n) => n.string === stringNumber))
+                const dimmed = stringFilter !== null && stringFilter !== stringNumber
                 return (
-                  <div key={lineIndex} className="whitespace-pre">
-                    {buildSegments(line, block.bodyOffsets[lineIndex], lineEvents).map((segment, i) =>
-                      segment.event ? (
+                  <div key={lineIndex} className={`whitespace-pre ${dimmed ? 'opacity-40' : ''}`}>
+                    {buildSegments(line, block.bodyOffsets[lineIndex], lineEvents).map((segment, i) => {
+                      if (!segment.event) {
+                        return (
+                          <span key={i} className="text-muted">
+                            {segment.text}
+                          </span>
+                        )
+                      }
+                      const isCurrent = segment.event.id === currentIndex
+                      const isHard = hardEvents.includes(segment.event.id)
+                      return (
                         <button
                           key={i}
-                          ref={segment.event.id === currentIndex ? activeRef : undefined}
+                          ref={isCurrent ? activeRef : undefined}
                           type="button"
                           onClick={() => onSelect(segment.event!.id)}
-                          aria-current={segment.event.id === currentIndex ? 'step' : undefined}
-                          aria-label={`Evento ${segment.event.id + 1}`}
+                          aria-current={isCurrent ? 'step' : undefined}
+                          aria-label={`Evento ${segment.event.id + 1}${isHard ? ', marcado como difícil' : ''}`}
                           className={`cursor-pointer rounded-sm whitespace-pre ${
-                            segment.event.id === currentIndex
+                            isCurrent
                               ? 'bg-accent font-bold text-accent-ink'
-                              : 'text-string hover:bg-surface-2'
+                              : isHard
+                                ? 'bg-danger/25 text-danger underline decoration-dotted hover:bg-danger/40'
+                                : 'text-string hover:bg-surface-2'
                           }`}
                         >
                           {segment.text}
                         </button>
-                      ) : (
-                        <span key={i} className="text-muted">
-                          {segment.text}
-                        </span>
-                      ),
-                    )}
+                      )
+                    })}
                   </div>
                 )
               })}

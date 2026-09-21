@@ -1,4 +1,8 @@
-export const STORAGE_KEY = 'tabfacil:v1'
+import { EMPTY_RHYTHM, type RhythmAnnotations } from '../domain/rhythm'
+
+export const LIBRARY_KEY = 'tabfacil:library:v2'
+export const PREFS_KEY = 'tabfacil:prefs:v2'
+const LEGACY_KEY = 'tabfacil:v1'
 
 export interface ViewPreferences {
   showLegend: boolean
@@ -6,16 +10,39 @@ export interface ViewPreferences {
   showPitches: boolean
 }
 
-export interface PersistedState {
-  version: 1
-  tabText: string
-  speed: number
+export interface GlobalPrefs {
+  viewPrefs: ViewPreferences
+  countIn: boolean
+}
+
+export interface PracticeRecord {
+  attempts: number
+  hits: number
+  lastAt: string
+}
+
+export interface SavedTab {
+  id: string
+  name: string
+  text: string
+  createdAt: string
+  updatedAt: string
   currentIndex: number
+  speed: number
   loopEnabled: boolean
   loopStart: number
   loopEnd: number
-  viewPrefs: ViewPreferences
-  savedAt: string
+  tuningId: string
+  capo: number
+  rhythm: RhythmAnnotations
+  hardEvents: number[]
+  practice: Record<number, PracticeRecord>
+  lastPracticedAt?: string
+}
+
+export interface Library {
+  tabs: SavedTab[]
+  currentId: string | null
 }
 
 export const DEFAULT_VIEW_PREFS: ViewPreferences = {
@@ -24,40 +51,122 @@ export const DEFAULT_VIEW_PREFS: ViewPreferences = {
   showPitches: true,
 }
 
-export function loadState(): PersistedState | null {
+export const DEFAULT_PREFS: GlobalPrefs = { viewPrefs: DEFAULT_VIEW_PREFS, countIn: true }
+
+export function newTabId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function createSavedTab(text: string, name: string, overrides: Partial<SavedTab> = {}): SavedTab {
+  const now = new Date().toISOString()
+  return {
+    id: newTabId(),
+    name,
+    text,
+    createdAt: now,
+    updatedAt: now,
+    currentIndex: 0,
+    speed: 1,
+    loopEnabled: false,
+    loopStart: 0,
+    loopEnd: 0,
+    tuningId: 'standard',
+    capo: 0,
+    rhythm: EMPTY_RHYTHM,
+    hardEvents: [],
+    practice: {},
+    ...overrides,
+  }
+}
+
+function sanitizeTab(raw: Partial<SavedTab>): SavedTab | null {
+  if (typeof raw.text !== 'string' || !raw.text.trim() || typeof raw.id !== 'string') return null
+  const base = createSavedTab(raw.text, typeof raw.name === 'string' ? raw.name : 'Tablatura')
+  return {
+    ...base,
+    ...raw,
+    id: raw.id,
+    rhythm: {
+      durations: raw.rhythm?.durations ?? {},
+      pausesAfter: Array.isArray(raw.rhythm?.pausesAfter) ? raw.rhythm.pausesAfter : [],
+    },
+    hardEvents: Array.isArray(raw.hardEvents) ? raw.hardEvents : [],
+    practice: raw.practice ?? {},
+  }
+}
+
+function migrateLegacy(): Library | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(LEGACY_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<PersistedState>
-    if (parsed.version !== 1 || typeof parsed.tabText !== 'string' || !parsed.tabText.trim()) return null
-    return {
-      version: 1,
-      tabText: parsed.tabText,
-      speed: typeof parsed.speed === 'number' ? parsed.speed : 1,
-      currentIndex: typeof parsed.currentIndex === 'number' ? parsed.currentIndex : 0,
-      loopEnabled: parsed.loopEnabled === true,
-      loopStart: typeof parsed.loopStart === 'number' ? parsed.loopStart : 0,
-      loopEnd: typeof parsed.loopEnd === 'number' ? parsed.loopEnd : 0,
-      viewPrefs: { ...DEFAULT_VIEW_PREFS, ...(parsed.viewPrefs ?? {}) },
-      savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : new Date().toISOString(),
-    }
+    const legacy = JSON.parse(raw) as Record<string, unknown>
+    if (typeof legacy.tabText !== 'string' || !legacy.tabText.trim()) return null
+    const tab = createSavedTab(legacy.tabText, 'Tablatura salva', {
+      currentIndex: typeof legacy.currentIndex === 'number' ? legacy.currentIndex : 0,
+      speed: typeof legacy.speed === 'number' ? legacy.speed : 1,
+      loopEnabled: legacy.loopEnabled === true,
+      loopStart: typeof legacy.loopStart === 'number' ? legacy.loopStart : 0,
+      loopEnd: typeof legacy.loopEnd === 'number' ? legacy.loopEnd : 0,
+    })
+    const library: Library = { tabs: [tab], currentId: tab.id }
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(library))
+    localStorage.removeItem(LEGACY_KEY)
+    return library
   } catch {
     return null
   }
 }
 
-export function saveState(state: Omit<PersistedState, 'version' | 'savedAt'>): void {
+export function loadLibrary(): Library {
   try {
-    const payload: PersistedState = { version: 1, ...state, savedAt: new Date().toISOString() }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+    const raw = localStorage.getItem(LIBRARY_KEY)
+    if (!raw) return migrateLegacy() ?? { tabs: [], currentId: null }
+    const parsed = JSON.parse(raw) as Partial<Library>
+    const tabs = (Array.isArray(parsed.tabs) ? parsed.tabs : [])
+      .map((t) => sanitizeTab(t))
+      .filter((t): t is SavedTab => t !== null)
+    const currentId = tabs.some((t) => t.id === parsed.currentId) ? (parsed.currentId as string) : null
+    return { tabs, currentId }
+  } catch {
+    return { tabs: [], currentId: null }
+  }
+}
+
+export function saveLibrary(library: Library): void {
+  try {
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(library))
   } catch {
     // Modo privado ou cota cheia: seguir sem persistir.
   }
 }
 
-export function clearState(): void {
+export function loadPrefs(): GlobalPrefs {
   try {
-    localStorage.removeItem(STORAGE_KEY)
+    const raw = localStorage.getItem(PREFS_KEY)
+    if (!raw) return DEFAULT_PREFS
+    const parsed = JSON.parse(raw) as Partial<GlobalPrefs>
+    return {
+      viewPrefs: { ...DEFAULT_VIEW_PREFS, ...(parsed.viewPrefs ?? {}) },
+      countIn: parsed.countIn !== false,
+    }
+  } catch {
+    return DEFAULT_PREFS
+  }
+}
+
+export function savePrefs(prefs: GlobalPrefs): void {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
+  } catch {
+    // ignorado
+  }
+}
+
+export function clearAll(): void {
+  try {
+    localStorage.removeItem(LIBRARY_KEY)
+    localStorage.removeItem(PREFS_KEY)
+    localStorage.removeItem(LEGACY_KEY)
   } catch {
     // ignorado
   }

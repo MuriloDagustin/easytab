@@ -1,4 +1,4 @@
-import { STRING_NAMES, fretToNoteName } from '../music/tuning'
+import { DEFAULT_SETUP, fretToNoteName, stringInfo, type Setup } from '../music/tuning'
 import type { Note, TabEvent, Technique } from '../tab/types'
 
 const ORDINALS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª']
@@ -11,14 +11,18 @@ export const TECHNIQUE_LABELS: Record<Technique, string> = {
   'pull-off': 'pull-off',
   bend: 'bend',
   release: 'release',
+  tapping: 'tapping',
 }
 
-export function stringLabel(string: Note['string']): string {
-  return `${ORDINALS[string - 1]} corda (${STRING_NAMES[string].ptName})`
+export function stringLabel(string: Note['string'], setup: Setup = DEFAULT_SETUP): string {
+  return `${ORDINALS[string - 1]} corda (${stringInfo(string, setup).ptName})`
 }
 
-function notePhrase(note: Note): string {
-  return note.fret === 0 ? `${stringLabel(note.string)} solta` : `${stringLabel(note.string)} na casa ${note.fret}`
+function notePhrase(note: Note, setup: Setup): string {
+  if (note.muted) return `${stringLabel(note.string, setup)} abafada`
+  return note.fret === 0
+    ? `${stringLabel(note.string, setup)} solta`
+    : `${stringLabel(note.string, setup)} na casa ${note.fret}`
 }
 
 function joinPt(parts: string[]): string {
@@ -26,12 +30,12 @@ function joinPt(parts: string[]): string {
   return `${parts.slice(0, -1).join(', ')} e ${parts.at(-1)}`
 }
 
-function arrivalSentence(note: Note): string | null {
+function arrivalSentence(note: Note, setup: Setup): string | null {
   switch (note.arrivedBy) {
     case 'hammer-on':
-      return `Sem palhetar de novo, martele o dedo na casa ${note.fret} da ${stringLabel(note.string)}.`
+      return `Sem palhetar de novo, martele o dedo na casa ${note.fret} da ${stringLabel(note.string, setup)}.`
     case 'pull-off':
-      return `Sem palhetar de novo, puxe o dedo para soar a ${notePhrase(note)}.`
+      return `Sem palhetar de novo, puxe o dedo para soar a ${notePhrase(note, setup)}.`
     case 'slide-up':
     case 'slide-down':
       return `Continue o slide até a casa ${note.fret}, sem levantar o dedo.`
@@ -39,6 +43,8 @@ function arrivalSentence(note: Note): string | null {
       return `Esta é a altura que o bend precisa alcançar (casa ${note.fret}).`
     case 'release':
       return `Solte o bend até voltar para a casa ${note.fret}.`
+    case 'tapping':
+      return `Com a mão da palhetada, bata o dedo na casa ${note.fret} da ${stringLabel(note.string, setup)} (tapping).`
     default:
       return null
   }
@@ -61,6 +67,8 @@ function techniqueSentence(note: Note, technique: Technique): string {
       return `Empurre a corda para o lado até a nota subir como se fosse a casa ${target ?? '?'} (bend).`
     case 'release':
       return `Solte o bend devagar até a nota voltar para a casa ${target ?? '?'}.`
+    case 'tapping':
+      return `Em seguida, bata o dedo da mão direita na casa ${target ?? '?'} (tapping).`
   }
 }
 
@@ -71,20 +79,28 @@ export interface EventDescription {
   details: string[]
   /** Notas soando, para exibir alturas. */
   pitches: string[]
+  /** Cifra escrita acima da tab neste ponto, quando houver. */
+  chord?: string
 }
 
-export function describeEvent(event: TabEvent): EventDescription {
-  const arrivals = event.notes.map(arrivalSentence).filter((s): s is string => s !== null)
+export function describeEvent(event: TabEvent, setup: Setup = DEFAULT_SETUP): EventDescription {
+  const arrivals = event.notes.map((n) => arrivalSentence(n, setup)).filter((s): s is string => s !== null)
   const picked = event.notes.filter((n) => !n.arrivedBy)
+  const allMuted = picked.length > 0 && picked.every((n) => n.muted)
 
   let main: string
   if (picked.length === 0) {
     main = arrivals[0] ?? 'Continue a nota anterior.'
+  } else if (allMuted) {
+    const strings = picked.map((n) => stringLabel(n.string, setup))
+    main =
+      picked.length === 1
+        ? `Toque a ${strings[0]} abafada: encoste os dedos na corda sem apertar, só para dar o "tec".`
+        : `Toque abafadas, sem deixar soar: ${joinPt(strings)}.`
   } else if (picked.length === 1) {
-    const note = picked[0]
-    main = note.fret === 0 ? `Toque a ${notePhrase(note)}.` : `Toque a ${notePhrase(note)}.`
+    main = `Toque a ${notePhrase(picked[0], setup)}.`
   } else {
-    main = `Toque ao mesmo tempo: ${joinPt(picked.map(notePhrase))}.`
+    main = `Toque ao mesmo tempo: ${joinPt(picked.map((n) => notePhrase(n, setup)))}.`
   }
 
   const details: string[] = []
@@ -95,7 +111,14 @@ export function describeEvent(event: TabEvent): EventDescription {
       details.push(techniqueSentence(note, technique))
     }
   }
+  if (event.notes.some((n) => n.palmMute)) {
+    details.push('Palm mute: apoie a lateral da mão da palhetada sobre as cordas, perto da ponte, para um som abafado.')
+  }
 
-  const pitches = event.notes.map((n) => `${stringLabel(n.string)}: ${fretToNoteName(n.string, n.fret)}`)
-  return { main, details, pitches }
+  const pitches = event.notes
+    .filter((n) => !n.muted)
+    .map((n) => `${stringLabel(n.string, setup)}: ${fretToNoteName(n.string, n.fret, setup)}`)
+  const description: EventDescription = { main, details, pitches }
+  if (event.chord) description.chord = event.chord
+  return description
 }

@@ -8,6 +8,7 @@ export type Technique =
   | 'pull-off'
   | 'bend'
   | 'release'
+  | 'tapping'
 
 export interface Note {
   string: StringNumber
@@ -18,6 +19,10 @@ export interface Note {
   targetFret?: number
   /** Técnica pela qual esta nota é alcançada a partir da anterior na mesma corda. */
   arrivedBy?: Technique
+  /** Corda abafada (`x`): toca-se sem deixar a nota soar. */
+  muted?: boolean
+  /** Palm mute indicado por uma linha "PM" junto ao bloco. */
+  palmMute?: boolean
 }
 
 export interface TabEvent {
@@ -28,6 +33,8 @@ export interface TabEvent {
   /** Quantidade de caracteres ocupados pela nota mais larga do evento. */
   width: number
   notes: Note[]
+  /** Cifra escrita acima da tab nesta coluna, quando houver. */
+  chord?: string
 }
 
 export interface TabBlock {
@@ -37,6 +44,10 @@ export interface TabBlock {
   /** Índice, em cada linha original, onde o corpo da tablatura começa. */
   bodyOffsets: number[]
   bodyLength: number
+  /** Linha de cifras acima do bloco, alinhada ao corpo, quando houver. */
+  chordLine?: string
+  /** Texto livre acima do bloco: título de seção, observação do autor. */
+  heading?: string
 }
 
 export interface ParsedTab {

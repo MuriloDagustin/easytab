@@ -12,6 +12,14 @@ function setup(overrides: Partial<Parameters<typeof Controls>[0]> = {}) {
     loopEnabled: false,
     loopStart: 0,
     loopEnd: 9,
+    visiblePosition: 3,
+    visibleTotal: 10,
+    countIn: true,
+    stringFilter: null,
+    canPrev: true,
+    canNext: true,
+    onCountIn: vi.fn(),
+    onStringFilter: vi.fn(),
     onPrev: vi.fn(),
     onNext: vi.fn(),
     onPlayEvent: vi.fn(),
@@ -37,10 +45,21 @@ describe('Controls', () => {
   })
 
   it('desabilita anterior no começo e próximo no fim', () => {
-    const { unmount } = render(<div />)
-    unmount()
-    setup({ index: 0 })
+    setup({ index: 0, canPrev: false, canNext: false })
     expect(screen.getByRole('button', { name: 'Nota anterior' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Próxima nota' })).toBeDisabled()
+  })
+
+  it('filtra por corda', async () => {
+    const props = setup()
+    await userEvent.selectOptions(screen.getByLabelText('Filtrar por corda'), '3')
+    expect(props.onStringFilter).toHaveBeenCalledWith(3)
+  })
+
+  it('liga e desliga a contagem', async () => {
+    const props = setup()
+    await userEvent.click(screen.getByLabelText('Contagem antes de tocar'))
+    expect(props.onCountIn).toHaveBeenCalledWith(false)
   })
 
   it('mostra pausar enquanto reproduz', () => {

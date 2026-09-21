@@ -1,72 +1,55 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useEffect, useReducer } from 'react'
 import { Home } from './components/Home'
 import { ImageInput } from './components/ImageInput'
 import { TextInput } from './components/TextInput'
 import { PlayerScreen } from './components/player/PlayerScreen'
 import { EXAMPLE_TAB } from './domain/tab/fixtures'
-import { appReducer, initialState } from './state/appReducer'
-import { clearState, loadState, saveState } from './storage/persistence'
+import { decodeShare } from './share/url'
+import { appReducer, createInitialState, currentSaved } from './state/appReducer'
+import { clearAll, loadLibrary, loadPrefs, saveLibrary, savePrefs } from './storage/persistence'
+
+function bootstrap() {
+  const base = createInitialState(loadLibrary(), loadPrefs())
+  const shared = decodeShare(window.location.hash)
+  if (shared) {
+    history.replaceState(null, '', window.location.pathname + window.location.search)
+    return appReducer(base, { type: 'openShared', payload: shared })
+  }
+  return base
+}
 
 export default function App() {
-  const [state, dispatch] = useReducer(appReducer, initialState)
-  const [saved, setSaved] = useState(() => loadState())
+  const [state, dispatch] = useReducer(appReducer, undefined, bootstrap)
 
   useEffect(() => {
-    if (!state.tab || !state.tabText) return
-    const id = setTimeout(() => {
-      saveState({
-        tabText: state.tabText,
-        speed: state.speed,
-        currentIndex: state.currentIndex,
-        loopEnabled: state.loopEnabled,
-        loopStart: state.loopStart,
-        loopEnd: state.loopEnd,
-        viewPrefs: state.viewPrefs,
-      })
-    }, 350)
+    const id = setTimeout(() => saveLibrary(state.library), 300)
     return () => clearTimeout(id)
-  }, [
-    state.tab,
-    state.tabText,
-    state.speed,
-    state.currentIndex,
-    state.loopEnabled,
-    state.loopStart,
-    state.loopEnd,
-    state.viewPrefs,
-  ])
+  }, [state.library])
 
-  function handleClearSaved() {
-    clearState()
-    setSaved(null)
-    dispatch({ type: 'clearSaved' })
+  useEffect(() => {
+    savePrefs(state.prefs)
+  }, [state.prefs])
+
+  useEffect(() => {
+    function onHashChange() {
+      const shared = decodeShare(window.location.hash)
+      if (!shared) return
+      history.replaceState(null, '', window.location.pathname + window.location.search)
+      dispatch({ type: 'openShared', payload: shared })
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  function handleClearAll() {
+    clearAll()
+    dispatch({ type: 'clearAll' })
   }
 
-  if (state.screen === 'player' && state.tab) {
-    return (
-      <PlayerScreen
-        tab={state.tab}
-        currentIndex={state.currentIndex}
-        speed={state.speed}
-        playing={state.playing}
-        loopEnabled={state.loopEnabled}
-        loopStart={state.loopStart}
-        loopEnd={state.loopEnd}
-        viewPrefs={state.viewPrefs}
-        onSelect={(index) => dispatch({ type: 'setIndex', index })}
-        onPrev={() => dispatch({ type: 'prev' })}
-        onNext={() => dispatch({ type: 'next' })}
-        onSpeed={(speed) => dispatch({ type: 'setSpeed', speed })}
-        onPlaying={(playing) => dispatch({ type: 'setPlaying', playing })}
-        onToggleLoop={() => dispatch({ type: 'toggleLoop' })}
-        onSetLoopStart={() => dispatch({ type: 'setLoopStart' })}
-        onSetLoopEnd={() => dispatch({ type: 'setLoopEnd' })}
-        onPref={(key, value) => dispatch({ type: 'setPref', key, value })}
-        onEdit={() => dispatch({ type: 'go', screen: 'text' })}
-        onNewTab={() => dispatch({ type: 'reset' })}
-        onClearSaved={handleClearSaved}
-      />
-    )
+  const saved = currentSaved(state)
+
+  if (state.screen === 'player' && state.tab && saved) {
+    return <PlayerScreen key={saved.id} tab={state.tab} saved={saved} state={state} dispatch={dispatch} onClearAll={handleClearAll} />
   }
 
   if (state.screen === 'text') {
@@ -75,7 +58,7 @@ export default function App() {
         value={state.draftText}
         onChange={(text) => dispatch({ type: 'setDraft', text })}
         onProcess={() => dispatch({ type: 'process' })}
-        onBack={() => dispatch({ type: 'go', screen: 'home' })}
+        onBack={() => dispatch({ type: 'go', screen: state.editingId ? 'player' : 'home' })}
         onUseExample={() => dispatch({ type: 'setDraft', text: EXAMPLE_TAB })}
         error={state.parseError}
         fromImage={state.ocrSource === 'image'}
@@ -94,15 +77,19 @@ export default function App() {
 
   return (
     <Home
+      tabs={state.library.tabs}
+      parseError={state.parseError}
+      notice={state.notice}
       onPasteTab={() => dispatch({ type: 'go', screen: 'text' })}
       onUploadImage={() => dispatch({ type: 'go', screen: 'image' })}
       onTryExample={() => {
         dispatch({ type: 'setDraft', text: EXAMPLE_TAB })
         dispatch({ type: 'go', screen: 'text' })
       }}
-      hasSavedSession={saved !== null}
-      onContinue={() => saved && dispatch({ type: 'restore', persisted: saved })}
-      onClearSaved={handleClearSaved}
+      onOpen={(id) => dispatch({ type: 'openSaved', id })}
+      onRename={(id, name) => dispatch({ type: 'renameSaved', id, name })}
+      onDelete={(id) => dispatch({ type: 'deleteSaved', id })}
+      onClearAll={handleClearAll}
     />
   )
 }

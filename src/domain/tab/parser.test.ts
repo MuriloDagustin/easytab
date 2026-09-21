@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseTab } from './parser'
-import { EXAMPLE_TAB, MULTI_BLOCK_TAB, TECHNIQUES_TAB, TWO_DIGIT_TAB, UNLABELED_TAB } from './fixtures'
+import { CIFRA_CLUB_TAB, EXAMPLE_TAB, MULTI_BLOCK_TAB, TECHNIQUES_TAB, TWO_DIGIT_TAB, UNLABELED_TAB } from './fixtures'
 import type { ParsedTab } from './types'
 
 function parseOk(text: string): ParsedTab {
@@ -130,5 +130,77 @@ describe('parseTab', () => {
     const tab = parseOk(EXAMPLE_TAB)
     expect(tab.blocks[0].bodyOffsets).toEqual([2, 2, 2, 2, 2, 2])
     expect(tab.blocks[0].lines[0].startsWith('e|')).toBe(true)
+  })
+})
+
+describe('símbolos adicionais', () => {
+  it('lê corda abafada (x) como nota muda', () => {
+    const tab = parseOk(wrap({ A: '--x--3--' }))
+    expect(tab.events[0].notes[0]).toMatchObject({ string: 5, fret: 0, muted: true })
+    expect(tab.events[1].notes[0]).toMatchObject({ fret: 3 })
+    expect(tab.events[1].notes[0].muted).toBeUndefined()
+  })
+
+  it('lê tapping (t) como técnica de ligação', () => {
+    const tab = parseOk(wrap({ e: '--5t12--' }))
+    expect(tab.events[0].notes[0]).toMatchObject({ fret: 5, techniques: ['tapping'], targetFret: 12 })
+    expect(tab.events[1].notes[0]).toMatchObject({ fret: 12, arrivedBy: 'tapping' })
+  })
+
+  it('marca palm mute pelas colunas da linha PM', () => {
+    const text = `${wrap({ E: '--0--0--0--0--' }, 14)}\n  PM------`
+    const tab = parseOk(text)
+    expect(tab.events.map((e) => e.notes[0].palmMute ?? false)).toEqual([true, true, false, false])
+  })
+
+  it('associa cifras escritas acima da tab aos eventos', () => {
+    const text = `  G     D\n${wrap({ B: '--3-----3--' }, 11)}`
+    const tab = parseOk(text)
+    expect(tab.events.map((e) => e.chord)).toEqual(['G', 'D'])
+    expect(tab.blocks[0].chordLine).toBe('  G     D')
+  })
+
+  it('não confunde texto comum com linha de cifras', () => {
+    const text = `Verso 1\n${wrap({ B: '--3--' })}`
+    const tab = parseOk(text)
+    expect(tab.events[0].chord).toBeUndefined()
+    expect(tab.blocks[0].chordLine).toBeUndefined()
+  })
+})
+
+describe('tablatura colada inteira do Cifra Club', () => {
+  const tab = parseOk(CIFRA_CLUB_TAB)
+
+  it('lê todos os blocos sem descartar nenhum, incluindo linhas sem hífens duplos', () => {
+    expect(tab.warnings).toEqual([])
+    expect(tab.blocks).toHaveLength(6)
+    const dense = tab.blocks.at(-1)!
+    expect(tab.events.filter((e) => e.blockIndex === dense.index)).toHaveLength(8)
+  })
+
+  it('usa a ordem de cima para baixo quando o rótulo E aparece nas duas pontas', () => {
+    expect(tab.events[0].notes[0]).toMatchObject({ string: 3, fret: 0 })
+  })
+
+  it('trata a quebra de linha do site como bloco seguinte, na sequência', () => {
+    const wrapped = tab.blocks[3]
+    expect(wrapped.lines[0].startsWith('E|15--12--11--10-|')).toBe(true)
+    expect(tab.events.filter((e) => e.blockIndex === 3).map((e) => e.notes[0].fret)).toEqual([15, 12, 11, 10])
+  })
+
+  it('aceita casas com zero à esquerda e barras de compasso no meio', () => {
+    const riff2 = tab.events.filter((e) => e.blockIndex === 1)
+    expect(riff2.some((e) => e.notes.some((n) => n.fret === 8))).toBe(true)
+    expect(riff2.some((e) => e.notes.some((n) => n.fret === 5 && n.targetFret === 17))).toBe(true)
+  })
+
+  it('guarda títulos de seção e observações como rótulo do bloco', () => {
+    expect(tab.blocks[0].heading).toBe('1º RIFF')
+    expect(tab.blocks[1].heading).toContain('2º RIFF')
+    expect(tab.blocks[1].heading).toContain('daqui')
+    expect(tab.blocks[2].heading).toBe('OBS: neste ultimo *10 arrastar a nota até o final do braço')
+    expect(tab.blocks[3].heading).toBeUndefined()
+    expect(tab.blocks[4].heading).toContain('ABAFANDO AS CORDAS')
+    expect(tab.blocks[5].heading).toBeUndefined()
   })
 })

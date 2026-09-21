@@ -1,4 +1,4 @@
-import { STRING_NAMES } from '../../domain/music/tuning'
+import { stringInfo, type Setup } from '../../domain/music/tuning'
 import type { StringNumber, TabEvent } from '../../domain/tab/types'
 
 interface Props {
@@ -7,19 +7,21 @@ interface Props {
   maxFret: number
   fingers: Map<string, number> | null
   showFingers: boolean
+  setup: Setup
+  onPlayString?: (string: StringNumber) => void
 }
 
 const STRING_WIDTHS = [1, 1.3, 1.7, 2.2, 2.8, 3.4]
 const INLAYS = [3, 5, 7, 9, 15, 17, 19, 21]
 
-export function Fretboard({ event, minFret, maxFret, fingers, showFingers }: Props) {
+export function Fretboard({ event, minFret, maxFret, fingers, showFingers, setup, onPlayString }: Props) {
   const firstFret = Math.max(1, minFret)
   const lastFret = Math.max(firstFret + 3, maxFret)
   const fretCount = lastFret - firstFret + 1
 
   const padTop = 26
   const padBottom = 30
-  const nutWidth = 58
+  const nutWidth = 62
   const fretWidth = 62
   const stringGap = 30
   const height = padTop + stringGap * 5 + padBottom
@@ -42,7 +44,12 @@ export function Fretboard({ event, minFret, maxFret, fingers, showFingers }: Pro
       aria-label="Braço da guitarra com as posições da nota atual"
     >
       <rect x={nutWidth} y={padTop - 12} width={width - nutWidth - 14} height={stringGap * 5 + 24} rx="4" fill="#20242e" />
-      <rect x={nutWidth - 7} y={padTop - 12} width={7} height={stringGap * 5 + 24} fill="#d8dbe3" />
+      <rect x={nutWidth - 7} y={padTop - 12} width={7} height={stringGap * 5 + 24} fill={setup.capo > 0 ? '#f5b942' : '#d8dbe3'} />
+      {setup.capo > 0 && (
+        <text x={nutWidth - 3} y={padTop - 16} textAnchor="middle" className="fill-[#f5b942] text-[10px] font-semibold">
+          capo {setup.capo}
+        </text>
+      )}
 
       {Array.from({ length: fretCount }, (_, i) => firstFret + i).map((fret) => (
         <g key={fret}>
@@ -69,28 +76,62 @@ export function Fretboard({ event, minFret, maxFret, fingers, showFingers }: Pro
         </g>
       ))}
 
-      {([1, 2, 3, 4, 5, 6] as StringNumber[]).map((s) => (
-        <g key={s}>
-          <line
-            x1={nutWidth - 7}
-            y1={stringY(s)}
-            x2={width - 14}
-            y2={stringY(s)}
-            stroke="#8e95a6"
-            strokeWidth={STRING_WIDTHS[s - 1]}
-          />
-          <text x={8} y={stringY(s) + 4} textAnchor="middle" className="fill-[#a3a9b8] text-[13px] font-medium">
-            {STRING_NAMES[s].letter}
-          </text>
-        </g>
-      ))}
+      {([1, 2, 3, 4, 5, 6] as StringNumber[]).map((s) => {
+        const info = stringInfo(s, setup)
+        return (
+          <g key={s}>
+            <line
+              x1={nutWidth - 7}
+              y1={stringY(s)}
+              x2={width - 14}
+              y2={stringY(s)}
+              stroke="#8e95a6"
+              strokeWidth={STRING_WIDTHS[s - 1]}
+            />
+            {onPlayString ? (
+              <g
+                role="button"
+                tabIndex={0}
+                aria-label={`Ouvir ${s}ª corda solta (${info.ptName})`}
+                className="cursor-pointer"
+                onClick={() => onPlayString(s)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onPlayString(s)
+                  }
+                }}
+              >
+                <rect x={0} y={stringY(s) - 12} width={24} height={24} rx="6" fill="#1f232d" />
+                <text x={12} y={stringY(s) + 4} textAnchor="middle" className="fill-[#eef0f4] text-[12px] font-semibold">
+                  {info.letter}
+                </text>
+              </g>
+            ) : (
+              <text x={12} y={stringY(s) + 4} textAnchor="middle" className="fill-[#a3a9b8] text-[13px] font-medium">
+                {info.letter}
+              </text>
+            )}
+          </g>
+        )
+      })}
 
       {markers.map(({ note, finger }) => {
         const y = stringY(note.string)
+        if (note.muted) {
+          const x = nutWidth - 30
+          return (
+            <g key={`${note.string}-x`} data-string={note.string} data-fret="x">
+              <line x1={x - 8} y1={y - 8} x2={x + 8} y2={y + 8} stroke="#f87171" strokeWidth="3.5" strokeLinecap="round" />
+              <line x1={x - 8} y1={y + 8} x2={x + 8} y2={y - 8} stroke="#f87171" strokeWidth="3.5" strokeLinecap="round" />
+              <title>{`Corda ${note.string} abafada`}</title>
+            </g>
+          )
+        }
         if (note.fret === 0) {
           return (
             <g key={`${note.string}-${note.fret}`} data-string={note.string} data-fret={0}>
-              <circle cx={nutWidth - 28} cy={y} r="11" fill="none" stroke="#f5b942" strokeWidth="3.5" />
+              <circle cx={nutWidth - 30} cy={y} r="11" fill="none" stroke="#f5b942" strokeWidth="3.5" />
               <title>{`Corda ${note.string} solta`}</title>
             </g>
           )

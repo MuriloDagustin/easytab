@@ -29,3 +29,31 @@ describe('afinação padrão', () => {
     expect(midiToFrequency(69)).toBe(440)
   })
 })
+
+describe('afinações alternativas e capo', () => {
+  it('Drop D abaixa só a 6ª corda', async () => {
+    const { getTuning, fretToNoteName } = await import('./tuning')
+    const setup = { tuning: getTuning('drop-d'), capo: 0 }
+    expect(fretToNoteName(6, 0, setup)).toBe('D2')
+    expect(fretToNoteName(5, 0, setup)).toBe('A2')
+  })
+
+  it('capo na casa 2 sobe todas as cordas um tom', async () => {
+    const { STANDARD_TUNING, fretToNoteName, stringInfo } = await import('./tuning')
+    const setup = { tuning: STANDARD_TUNING, capo: 2 }
+    expect(fretToNoteName(6, 0, setup)).toBe('F#2')
+    expect(fretToNoteName(1, 3, setup)).toBe('A4')
+    expect(stringInfo(6, setup).ptName).toBe('Fá#')
+  })
+
+  it('afinação desconhecida cai na padrão', async () => {
+    const { getTuning } = await import('./tuning')
+    expect(getTuning('nope').id).toBe('standard')
+  })
+
+  it('converte frequência em MIDI', async () => {
+    const { frequencyToMidi } = await import('./tuning')
+    expect(frequencyToMidi(440)).toBe(69)
+    expect(frequencyToMidi(82.41)).toBeCloseTo(40, 1)
+  })
+})

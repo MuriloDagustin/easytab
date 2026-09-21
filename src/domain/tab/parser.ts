@@ -1,8 +1,11 @@
 import type { Note, ParseResult, ParsedTab, StringNumber, TabBlock, TabEvent, Technique } from './types'
 
 // Rótulo opcional, separador opcional, corpo feito de hífens, dígitos, técnicas e barras.
-const TAB_LINE = /^\s*([eEBGDA])?\s*[:]?\s*(\|?)([-0-9~/\\hpbrxX|()\s]*)$/
-const BODY_HAS_DASHES = /-{2,}/
+const TAB_LINE = /^\s*([eEBGDA])?\s*[:]?\s*(\|?)([-0-9~/\\hpbrxXtT|()\s]*)$/
+// Linha de tab: dois hífens seguidos, ou pelo menos três espalhados (ex.: "-12-12-12-|").
+const BODY_HAS_DASHES = /-{2,}|-[^-]*-[^-]*-/
+const CHORD_TOKEN = /^[A-G](#|b)?(m|maj|min|dim|aug|sus|add|M|\+|°|º)?\d{0,2}(\/[A-G](#|b)?)?$/
+const PALM_MUTE_LINE = /^\s*(P\.?M\.?)[\s\-|.]*$/i
 const LABEL_TO_STRING: Record<string, StringNumber> = { e: 1, B: 2, G: 3, D: 4, A: 5, E: 6 }
 const LINK_TECHNIQUES: Record<string, Technique> = {
   h: 'hammer-on',
@@ -11,6 +14,8 @@ const LINK_TECHNIQUES: Record<string, Technique> = {
   '\\': 'slide-down',
   b: 'bend',
   r: 'release',
+  t: 'tapping',
+  T: 'tapping',
 }
 
 interface RawLine {
@@ -18,6 +23,11 @@ interface RawLine {
   label: string | null
   bodyOffset: number
   body: string
+}
+
+interface Decoration {
+  chordLine?: string
+  palmMuteRanges: Array<[number, number]>
 }
 
 function matchLine(text: string): RawLine | null {
@@ -28,27 +38,74 @@ function matchLine(text: string): RawLine | null {
   return { text, label: label ?? null, bodyOffset: text.length - body.length, body }
 }
 
-function groupLines(lines: string[]): RawLine[][] {
-  const groups: RawLine[][] = []
+function isChordLine(text: string): boolean {
+  const tokens = text.trim().split(/\s+/)
+  return tokens.length > 0 && tokens.every((t) => CHORD_TOKEN.test(t))
+}
+
+/** Encontra trechos "PM-----" e devolve os intervalos de colunas (relativos ao texto). */
+function palmMuteRanges(text: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = []
+  const re = /P\.?M\.?[-.\s]*/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    ranges.push([m.index, m.index + m[0].trimEnd().length])
+  }
+  return ranges
+}
+
+interface Group {
+  lines: RawLine[]
+  /** Última linha de texto logo acima do bloco (candidata a cifras ou PM). */
+  above: string | null
+  below: string | null
+  /** Todo o texto livre entre o bloco anterior e este: títulos de seção, observações. */
+  heading: string[]
+}
+
+function groupLines(lines: string[]): Group[] {
+  const groups: Group[] = []
   let current: RawLine[] = []
+  let pendingText: string[] = []
+
+  const flush = (below: string | null) => {
+    if (current.length) {
+      groups.push({ lines: current, above: pendingText.at(-1) ?? null, below, heading: pendingText })
+    }
+    current = []
+    pendingText = []
+  }
+
   for (const line of lines) {
     const raw = matchLine(line)
     if (raw) {
       current.push(raw)
-    } else if (current.length) {
-      groups.push(current)
-      current = []
+      continue
     }
+    if (current.length) flush(line.trim() ? line : null)
+    if (line.trim()) pendingText.push(line)
   }
-  if (current.length) groups.push(current)
+  flush(null)
   return groups
+}
+
+const MAX_HEADING = 160
+
+/** Texto livre acima do bloco, sem a linha de cifras/PM, compactado em uma frase. */
+function headingFor(group: Group, decoration: Decoration): string | undefined {
+  const lines = group.heading.filter((l) => l !== decoration.chordLine && !PALM_MUTE_LINE.test(l))
+  const text = lines
+    .map((l) => l.replace(/\\/g, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' ')
+  if (!text) return undefined
+  return text.length > MAX_HEADING ? `${text.slice(0, MAX_HEADING - 1)}…` : text
 }
 
 function orderByLabels(lines: RawLine[]): RawLine[] {
   const labels = lines.map((l) => l.label)
   if (labels.some((l) => l === null)) return lines
-  const seen = new Set(labels)
-  if (seen.size !== 6) return lines
+  if (new Set(labels).size !== 6) return lines
   return [...lines].sort((a, b) => LABEL_TO_STRING[a.label!] - LABEL_TO_STRING[b.label!])
 }
 
@@ -67,16 +124,55 @@ function readDigits(body: string, from: number): { fret: number; length: number 
   return fret > 24 ? null : { fret, length: end - from }
 }
 
+function decorationsFor(group: Group, bodyOffset: number): Decoration {
+  const decoration: Decoration = { palmMuteRanges: [] }
+  for (const candidate of [group.above, group.below]) {
+    if (!candidate) continue
+    if (PALM_MUTE_LINE.test(candidate) || /P\.?M\.?[-.]{2,}/i.test(candidate)) {
+      decoration.palmMuteRanges.push(
+        ...palmMuteRanges(candidate).map(([a, b]) => [a - bodyOffset, b - bodyOffset] as [number, number]),
+      )
+    } else if (candidate === group.above && isChordLine(candidate)) {
+      decoration.chordLine = candidate
+    }
+  }
+  return decoration
+}
+
+function assignChords(chordLine: string | undefined, bodyOffset: number, events: TabEvent[]): void {
+  if (!chordLine || !events.length) return
+  const re = /\S+/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(chordLine))) {
+    const textColumn = m.index
+    let best: TabEvent | null = null
+    let bestDistance = Infinity
+    for (const event of events) {
+      if (event.chord) continue
+      const distance = Math.abs(bodyOffset + event.column - textColumn)
+      if (distance < bestDistance) {
+        best = event
+        bestDistance = distance
+      }
+    }
+    if (best && bestDistance <= 4) best.chord = m[0]
+  }
+}
+
 function parseBlock(
-  raw: RawLine[],
+  group: Group,
   blockIndex: number,
   nextId: () => number,
   warnings: Set<string>,
 ): { block: TabBlock; events: TabEvent[] } {
-  const ordered = orderByLabels(raw)
+  const ordered = orderByLabels(group.lines)
   const { bodies, length } = normalizeBodies(ordered)
+  const bodyOffset = ordered[0].bodyOffset
+  const decoration = decorationsFor(group, bodyOffset)
   const events: TabEvent[] = []
   const pendingArrival: (Technique | undefined)[] = Array(6).fill(undefined)
+
+  const isPalmMuted = (col: number) => decoration.palmMuteRanges.some(([a, b]) => col >= a && col < b)
 
   for (let col = 0; col < length; col++) {
     const notes: Note[] = []
@@ -84,15 +180,18 @@ function parseBlock(
     for (let s = 0; s < 6; s++) {
       const body = bodies[s]
       const ch = body[col]
+      const string = (s + 1) as StringNumber
+
       if (ch === 'x' || ch === 'X') {
-        warnings.add('O símbolo "x" (corda abafada) ainda não é interpretado e foi ignorado.')
+        notes.push({ string, fret: 0, techniques: [], muted: true, palmMute: isPalmMuted(col) || undefined })
         continue
       }
       if (!/\d/.test(ch) || (col > 0 && /\d/.test(body[col - 1]))) continue
       const digits = readDigits(body, col)
       if (!digits) continue
 
-      const note: Note = { string: (s + 1) as StringNumber, fret: digits.fret, techniques: [] }
+      const note: Note = { string, fret: digits.fret, techniques: [] }
+      if (isPalmMuted(col)) note.palmMute = true
       if (pendingArrival[s]) {
         note.arrivedBy = pendingArrival[s]
         pendingArrival[s] = undefined
@@ -114,7 +213,6 @@ function parseBlock(
             note.targetFret = target.fret
             pendingArrival[s] = link
           }
-          break
         }
         break
       }
@@ -126,6 +224,11 @@ function parseBlock(
       events.push({ id: nextId(), blockIndex, column: col, width, notes })
     }
   }
+  assignChords(decoration.chordLine, bodyOffset, events)
+
+  if (events.length && events.every((e) => e.notes.every((n) => n.muted))) {
+    warnings.add('Um bloco só tem cordas abafadas ("x"), sem notas para ouvir.')
+  }
 
   const block: TabBlock = {
     index: blockIndex,
@@ -133,6 +236,9 @@ function parseBlock(
     bodyOffsets: ordered.map((l) => l.bodyOffset),
     bodyLength: length,
   }
+  if (decoration.chordLine) block.chordLine = decoration.chordLine
+  const heading = headingFor(group, decoration)
+  if (heading) block.heading = heading
   return { block, events }
 }
 
@@ -144,13 +250,20 @@ export function parseTab(input: string): ParseResult {
 
   const groups = groupLines(text.split('\n'))
   const warnings = new Set<string>()
-  const blocksRaw: RawLine[][] = []
+  const blocksRaw: Group[] = []
   for (const group of groups) {
-    if (group.length % 6 === 0) {
-      for (let i = 0; i < group.length; i += 6) blocksRaw.push(group.slice(i, i + 6))
+    if (group.lines.length % 6 === 0) {
+      for (let i = 0; i < group.lines.length; i += 6) {
+        blocksRaw.push({
+          lines: group.lines.slice(i, i + 6),
+          above: i === 0 ? group.above : null,
+          below: i + 6 === group.lines.length ? group.below : null,
+          heading: i === 0 ? group.heading : [],
+        })
+      }
     } else {
       warnings.add(
-        `Um trecho com ${group.length} linha(s) foi ignorado: cada bloco precisa ter exatamente 6 cordas.`,
+        `Um trecho com ${group.lines.length} linha(s) foi ignorado: cada bloco precisa ter exatamente 6 cordas.`,
       )
     }
   }
@@ -167,8 +280,8 @@ export function parseTab(input: string): ParseResult {
   const nextId = () => id++
   const events: TabEvent[] = []
   const blocks: TabBlock[] = []
-  blocksRaw.forEach((raw, index) => {
-    const parsed = parseBlock(raw, index, nextId, warnings)
+  blocksRaw.forEach((group, index) => {
+    const parsed = parseBlock(group, index, nextId, warnings)
     blocks.push(parsed.block)
     events.push(...parsed.events)
   })
