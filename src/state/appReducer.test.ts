@@ -126,4 +126,18 @@ describe('appReducer', () => {
     expect(state.library.tabs).toHaveLength(0)
     expect(state.screen).toBe('home')
   })
+
+  it('grava ritmo, marca dias de prática e ajusta o treino de velocidade', () => {
+    let state = appReducer(processed(), { type: 'recordRhythm', recorded: { baseMs: 500, units: { 0: 2 } } })
+    expect(currentSaved(state)?.rhythm.recorded).toEqual({ baseMs: 500, units: { 0: 2 } })
+    state = appReducer(state, { type: 'clearRecordedRhythm' })
+    expect(currentSaved(state)?.rhythm.recorded).toBeUndefined()
+    state = appReducer(state, { type: 'markPracticeDay', day: '2026-09-21' })
+    state = appReducer(state, { type: 'markPracticeDay', day: '2026-09-21' })
+    expect(state.prefs.practiceDays).toEqual(['2026-09-21'])
+    state = appReducer(state, { type: 'recordPractice', eventId: 0, hit: true })
+    expect(state.prefs.practiceDays.length).toBe(2)
+    state = appReducer(state, { type: 'setSpeedTrainer', patch: { enabled: true, target: 1.25 } })
+    expect(state.prefs.speedTrainer).toMatchObject({ enabled: true, start: 0.5, target: 1.25 })
+  })
 })

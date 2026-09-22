@@ -78,6 +78,7 @@ export default function App() {
   return (
     <Home
       tabs={state.library.tabs}
+      practiceDays={state.prefs.practiceDays}
       parseError={state.parseError}
       notice={state.notice}
       onPasteTab={() => dispatch({ type: 'go', screen: 'text' })}

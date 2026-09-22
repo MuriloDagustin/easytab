@@ -47,4 +47,22 @@ describe('TabGraphic', () => {
     render(<TabGraphic tab={tab()} currentIndex={0} hardEvents={[4]} stringFilter={null} setup={DEFAULT_SETUP} onSelect={() => {}} />)
     expect(screen.getByRole('button', { name: 'Evento 5, marcado como difícil' })).toBeInTheDocument()
   })
+
+  it('desenha a partitura com uma cabeça de nota por nota tocada', () => {
+    const { container } = render(
+      <TabGraphic tab={tab()} currentIndex={0} hardEvents={[]} stringFilter={null} setup={DEFAULT_SETUP} showNotation onSelect={() => {}} />,
+    )
+    expect(container.querySelector('[data-staff]')).toBeInTheDocument()
+    const heads = container.querySelectorAll('.notehead')
+    expect(heads.length).toBe(tab().events.reduce((n, e) => n + e.notes.length, 0))
+  })
+
+  it('cifras clicáveis e marca de repetição no título', async () => {
+    const onChord = vi.fn()
+    const text = `[Riff] 2X\n   G\n${['e', 'B', 'G', 'D', 'A', 'E'].map((l) => `${l}|${l === 'e' ? '--3--' : '-----'}|`).join('\n')}`
+    render(<TabGraphic tab={tab(text)} currentIndex={0} hardEvents={[]} stringFilter={null} setup={DEFAULT_SETUP} onSelect={() => {}} onChord={onChord} />)
+    expect(screen.getByText('seção ×2')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Ver acorde G' }))
+    expect(onChord).toHaveBeenCalledWith('G')
+  })
 })

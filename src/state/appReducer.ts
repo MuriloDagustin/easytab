@@ -1,6 +1,18 @@
 import { parseTab } from '../domain/tab/parser'
 import type { ParsedTab, StringNumber } from '../domain/tab/types'
-import { EMPTY_RHYTHM, setDuration, togglePause, type Duration, type RhythmAnnotations } from '../domain/rhythm'
+import {
+  EMPTY_RHYTHM,
+  clearRecorded,
+  mergeRecorded,
+  setDuration,
+  togglePause,
+  type Duration,
+  type RecordedRhythm,
+  type RhythmAnnotations,
+} from '../domain/rhythm'
+import { addPracticeDay, dayKey } from '../domain/streak'
+import type { SpeedTrainer } from '../domain/speedTrainer'
+import type { DrumPattern } from '../audio/beat'
 import { MAX_CAPO, getTuning } from '../domain/music/tuning'
 import type { SharePayload } from '../share/url'
 import type { Timbre } from '../audio/instruments'
@@ -55,6 +67,13 @@ export type AppAction =
   | { type: 'setTabStyle'; style: ViewPreferences['tabStyle'] }
   | { type: 'setCountIn'; value: boolean }
   | { type: 'setTimbre'; timbre: Timbre }
+  | { type: 'setMetronome'; value: boolean }
+  | { type: 'setDrums'; pattern: DrumPattern }
+  | { type: 'setPlayRepeats'; value: boolean }
+  | { type: 'setSpeedTrainer'; patch: Partial<SpeedTrainer> }
+  | { type: 'markPracticeDay'; day?: string }
+  | { type: 'recordRhythm'; recorded: RecordedRhythm }
+  | { type: 'clearRecordedRhythm' }
   | { type: 'setTuning'; tuningId: string }
   | { type: 'setCapo'; capo: number }
   | { type: 'setDuration'; duration: Duration }
@@ -168,6 +187,12 @@ function openTab(state: AppState, saved: SavedTab, notice: string | null = null)
   }
 }
 
+function markDay(state: AppState, day = dayKey(new Date())): AppState {
+  const practiceDays = addPracticeDay(state.prefs.practiceDays, day)
+  if (practiceDays === state.prefs.practiceDays) return state
+  return { ...state, prefs: { ...state.prefs, practiceDays } }
+}
+
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'go':
@@ -276,6 +301,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, prefs: { ...state.prefs, countIn: action.value } }
     case 'setTimbre':
       return { ...state, prefs: { ...state.prefs, timbre: action.timbre } }
+    case 'setMetronome':
+      return { ...state, prefs: { ...state.prefs, metronome: action.value } }
+    case 'setDrums':
+      return { ...state, prefs: { ...state.prefs, drums: action.pattern } }
+    case 'setPlayRepeats':
+      return { ...state, prefs: { ...state.prefs, playRepeats: action.value } }
+    case 'setSpeedTrainer':
+      return { ...state, prefs: { ...state.prefs, speedTrainer: { ...state.prefs.speedTrainer, ...action.patch } } }
+    case 'markPracticeDay':
+      return markDay(state, action.day)
+    case 'recordRhythm':
+      return updateCurrent(state, (t) => ({ rhythm: mergeRecorded(t.rhythm, action.recorded) }))
+    case 'clearRecordedRhythm':
+      return updateCurrent(state, (t) => ({ rhythm: clearRecorded(t.rhythm) }))
     case 'setTuning':
       return updateCurrent(state, { tuningId: getTuning(action.tuningId).id })
     case 'setCapo':
@@ -291,7 +330,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           : [...t.hardEvents, state.currentIndex].sort((a, b) => a - b),
       }))
     case 'recordPractice':
-      return updateCurrent(state, (t) => {
+      return updateCurrent(markDay(state), (t) => {
         const previous: PracticeRecord = t.practice[action.eventId] ?? { attempts: 0, hits: 0, lastAt: '' }
         const now = new Date().toISOString()
         return {

@@ -38,4 +38,15 @@ describe('biblioteca em localStorage', () => {
     clearAll()
     expect(localStorage.getItem(LIBRARY_KEY)).toBeNull()
   })
+
+  it('preserva o ritmo gravado e completa preferências novas com o padrão', async () => {
+    const { loadPrefs, PREFS_KEY } = await import('./persistence')
+    const tab = createSavedTab('e|--3--|', 'Riff', { rhythm: { durations: {}, pausesAfter: [], recorded: { baseMs: 500, units: { 0: 2 } } } })
+    saveLibrary({ tabs: [tab], currentId: null })
+    expect(loadLibrary().tabs[0].rhythm.recorded).toEqual({ baseMs: 500, units: { 0: 2 } })
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ countIn: false, drums: 'jazz' }))
+    const prefs = loadPrefs()
+    expect(prefs).toMatchObject({ countIn: false, drums: 'off', playRepeats: true, metronome: false, practiceDays: [] })
+    expect(prefs.viewPrefs.leftHanded).toBe(false)
+  })
 })

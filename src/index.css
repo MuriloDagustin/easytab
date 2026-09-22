@@ -35,3 +35,48 @@ body {
   outline: 3px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .print-area {
+    border: 0 !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+
+  .print-area [data-block] {
+    break-inside: avoid;
+  }
+
+  .print-area svg text {
+    fill: #000 !important;
+  }
+
+  .print-area .string-line,
+  .print-area .staff-line {
+    stroke: #555 !important;
+  }
+
+  .print-area .note-bg {
+    fill: #fff !important;
+  }
+
+  .print-area .notehead,
+  .print-area .stem {
+    fill: #000 !important;
+    stroke: #000 !important;
+  }
+
+  .print-area .cursor {
+    display: none;
+  }
+
+  .print-area p {
+    color: #333 !important;
+  }
+}

@@ -2,6 +2,7 @@ import { midiToNoteName } from '../../domain/music/tuning'
 import type { PitchReading } from '../../audio/pitch'
 import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
+import { stars } from '../../domain/streak'
 
 export type PracticeStatus = 'off' | 'starting' | 'listening' | 'hit' | 'error'
 
@@ -11,9 +12,20 @@ interface Props {
   expected: string[]
   error: string | null
   onToggle: () => void
+  session: { hits: number; misses: number }
 }
 
-export function PracticePanel({ status, reading, expected, error, onToggle }: Props) {
+function Stars({ count }: { count: number }) {
+  return (
+    <span aria-label={`${count} de 3 estrelas`} className="text-accent">
+      {'★'.repeat(count)}
+      <span className="text-border">{'★'.repeat(3 - count)}</span>
+    </span>
+  )
+}
+
+export function PracticePanel({ status, reading, expected, error, onToggle, session }: Props) {
+  const attempts = session.hits + session.misses
   const active = status !== 'off' && status !== 'error'
   return (
     <div className="flex flex-col gap-3">
@@ -27,6 +39,17 @@ export function PracticePanel({ status, reading, expected, error, onToggle }: Pr
       </div>
 
       {error && <Alert tone="error">{error}</Alert>}
+
+      {attempts > 0 && (
+        <p className="flex flex-wrap items-center gap-2 text-sm" data-score>
+          <span className="font-semibold">Pontuação desta sessão:</span>
+          <span>
+            {session.hits} acerto{session.hits === 1 ? '' : 's'} e {session.misses} erro{session.misses === 1 ? '' : 's'} (
+            {Math.round((session.hits / attempts) * 100)}%)
+          </span>
+          <Stars count={stars(session.hits, attempts)} />
+        </p>
+      )}
 
       {active && (
         <div role="status" aria-live="polite" className="grid gap-2 rounded-xl border border-border bg-surface-2 p-3 text-sm sm:grid-cols-3">

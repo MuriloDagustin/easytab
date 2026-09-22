@@ -2,11 +2,13 @@ import type * as ToneType from 'tone'
 import { DEFAULT_SETUP, fretToFrequency, fretToMidi, midiToNoteName, type Setup } from '../domain/music/tuning'
 import type { Note, StringNumber, TabEvent } from '../domain/tab/types'
 import { DEFAULT_TIMBRE, getInstrument, sampleUrls, samplesBaseUrl, type Timbre } from './instruments'
+import { hitsAt, type DrumPattern } from './beat'
 
 export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5] as const
 export type Speed = (typeof SPEEDS)[number]
 
-const BASE_EVENT_MS = 620
+import { DEFAULT_BASE_MS } from '../domain/rhythm'
+
 export const COUNT_IN_BEATS = 3
 
 export interface SequenceOptions {
@@ -19,6 +21,11 @@ export interface SequenceOptions {
   /** Duração relativa (1 = base) de cada evento, já incluindo pausa posterior. */
   unitsOf: (eventId: number) => number
   countIn: boolean
+  metronome?: boolean
+  drums?: DrumPattern
+  /** Velocidade de cada volta do loop (treino de velocidade); sem isso, usa `speed`. */
+  speedForLoop?: (loop: number) => number
+  onLoop?: (loop: number, speed: number) => void
   onCountIn: (beatsLeft: number) => void
   onEvent: (index: number) => void
   onFinish: () => void
@@ -41,6 +48,11 @@ export class TabPlayer {
   private loading = new Map<Timbre, Promise<Voice>>()
   private muteSynth: ToneType.NoiseSynth | null = null
   private click: ToneType.MembraneSynth | null = null
+  private kick: ToneType.MembraneSynth | null = null
+  private snare: ToneType.NoiseSynth | null = null
+  private hat: ToneType.MetalSynth | null = null
+  private gridTimer: ReturnType<typeof setTimeout> | null = null
+  private baseMs = DEFAULT_BASE_MS
   private vibrato: ToneType.Vibrato | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
   private started = false
@@ -56,6 +68,11 @@ export class TabPlayer {
 
   setTimbre(timbre: Timbre): void {
     this.timbre = timbre
+  }
+
+  /** Duração da unidade de ritmo em ms a 1×; vem do ritmo gravado quando existe. */
+  setBaseMs(ms: number): void {
+    this.baseMs = ms
   }
 
   private async ensureContext() {
@@ -77,6 +94,12 @@ export class TabPlayer {
         envelope: { attack: 0.001, decay: 0.12, sustain: 0 },
       }).toDestination()
       this.click.volume.value = -6
+      this.kick = new Tone.MembraneSynth({ pitchDecay: 0.05, octaves: 6, envelope: { attack: 0.001, decay: 0.3, sustain: 0 } }).toDestination()
+      this.kick.volume.value = -4
+      this.snare = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.14, sustain: 0 } }).toDestination()
+      this.snare.volume.value = -16
+      this.hat = new Tone.MetalSynth({ envelope: { attack: 0.001, decay: 0.05, release: 0.01 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).toDestination()
+      this.hat.volume.value = -30
     }
     return Tone
   }
@@ -144,7 +167,7 @@ export class TabPlayer {
   }
 
   eventDurationMs(speed: number, units = 1): number {
-    return (BASE_EVENT_MS * units) / speed
+    return (this.baseMs * units) / speed
   }
 
   async playOpenString(string: StringNumber, setup: Setup = DEFAULT_SETUP): Promise<void> {
@@ -191,23 +214,52 @@ export class TabPlayer {
     this.click?.triggerAttackRelease(accent ? 'C5' : 'G4', 0.08)
   }
 
+  private startGrid(generation: number, speedRef: { value: number }, metronome: boolean, drums: DrumPattern) {
+    if (!metronome && drums === 'off') return
+    let eighth = 0
+    const started = performance.now()
+    let elapsed = 0
+    const tick = () => {
+      if (generation !== this.generation) return
+      const hits = hitsAt(eighth, drums, metronome)
+      if (hits.click) this.playClick(hits.accent)
+      if (hits.kick) this.kick?.triggerAttackRelease('C1', 0.2)
+      if (hits.snare) this.snare?.triggerAttackRelease(0.12)
+      if (hits.hat) this.hat?.triggerAttackRelease('C6', 0.03, undefined, hits.accent ? 0.5 : 0.3)
+      eighth++
+      // Agenda pelo relógio acumulado para a grade não escorregar com os atrasos do setTimeout.
+      elapsed += this.eventDurationMs(speedRef.value) / 2
+      this.gridTimer = setTimeout(tick, Math.max(0, started + elapsed - performance.now()))
+    }
+    tick()
+  }
+
   async playSequence(options: SequenceOptions): Promise<void> {
     await this.ensureVoice()
     this.stopTimer()
     const generation = ++this.generation
-    const { events, order, speed, loop, setup, unitsOf, countIn, onCountIn, onEvent, onFinish } = options
+    const { events, order, loop, setup, unitsOf, countIn, onCountIn, onEvent, onFinish } = options
     if (!order.length) {
       onFinish()
       return
     }
+    const speed = { value: options.speedForLoop ? options.speedForLoop(0) : options.speed }
+    if (options.speedForLoop) options.onLoop?.(0, speed.value)
 
     let position = 0
+    let loopCount = 0
     const step = async () => {
       if (generation !== this.generation) return
       if (position >= order.length) {
         if (loop) {
           position = 0
+          loopCount++
+          if (options.speedForLoop) {
+            speed.value = options.speedForLoop(loopCount)
+            options.onLoop?.(loopCount, speed.value)
+          }
         } else {
+          this.stopGrid()
           onFinish()
           return
         }
@@ -215,13 +267,13 @@ export class TabPlayer {
       const eventId = order[position]
       const units = unitsOf(eventId)
       onEvent(eventId)
-      await this.playEvent(events[eventId], speed, setup, Math.min(units, 2))
+      await this.playEvent(events[eventId], speed.value, setup, Math.min(units, 2))
       position += 1
-      this.timer = setTimeout(step, this.eventDurationMs(speed, units))
+      this.timer = setTimeout(step, this.eventDurationMs(speed.value, units))
     }
 
     if (countIn) {
-      const beatMs = this.eventDurationMs(speed)
+      const beatMs = this.eventDurationMs(speed.value)
       for (let beat = COUNT_IN_BEATS; beat >= 1; beat--) {
         if (generation !== this.generation) return
         onCountIn(beat)
@@ -232,7 +284,16 @@ export class TabPlayer {
       }
       onCountIn(0)
     }
+    if (generation !== this.generation) return
+    this.startGrid(generation, speed, options.metronome ?? false, options.drums ?? 'off')
     await step()
+  }
+
+  private stopGrid() {
+    if (this.gridTimer) {
+      clearTimeout(this.gridTimer)
+      this.gridTimer = null
+    }
   }
 
   private stopTimer() {
@@ -245,6 +306,7 @@ export class TabPlayer {
   pause(): void {
     this.generation++
     this.stopTimer()
+    this.stopGrid()
     this.voice?.releaseAll()
   }
 
@@ -255,6 +317,12 @@ export class TabPlayer {
     this.vibrato?.dispose()
     this.muteSynth?.dispose()
     this.click?.dispose()
+    this.kick?.dispose()
+    this.snare?.dispose()
+    this.hat?.dispose()
+    this.kick = null
+    this.snare = null
+    this.hat = null
     this.vibrato = null
     this.muteSynth = null
     this.click = null

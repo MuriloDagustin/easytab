@@ -13,15 +13,61 @@ interface Props {
   onPlayEvent: () => void
   onTogglePlay: () => void
   onSpeed: (speed: number) => void
+  /** Velocidade atual do treino de velocidade, enquanto ele roda. */
+  trainerSpeed?: number | null
+  recording?: { tapped: number; total: number; onTap: () => void; onFinish: () => void; onCancel: () => void } | null
 }
 
 /** Barra fixa no rodapé com o que o aluno aperta o tempo todo. */
-export function TransportBar({ index, total, playing, speed, canPrev, canNext, onPrev, onNext, onPlayEvent, onTogglePlay, onSpeed }: Props) {
+export function TransportBar({
+  index,
+  total,
+  playing,
+  speed,
+  canPrev,
+  canNext,
+  onPrev,
+  onNext,
+  onPlayEvent,
+  onTogglePlay,
+  onSpeed,
+  trainerSpeed = null,
+  recording = null,
+}: Props) {
+  if (recording) {
+    return (
+      <div
+        role="toolbar"
+        aria-label="Gravação de ritmo"
+        className="sticky bottom-0 z-20 -mx-4 border-t border-danger/50 bg-surface/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur print:hidden"
+      >
+        <div className="mx-auto flex max-w-5xl flex-col gap-2">
+          <Button size="lg" variant="primary" className="w-full min-h-16 text-lg" onClick={recording.onTap}>
+            ⏺ Toque aqui a cada nota
+          </Button>
+          <div className="flex items-center justify-between gap-2 text-sm text-muted">
+            <span>
+              {recording.tapped} de {recording.total} notas
+            </span>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={recording.onCancel}>
+                Cancelar
+              </Button>
+              <Button onClick={recording.onFinish} disabled={recording.tapped < 2}>
+                Concluir
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       role="toolbar"
       aria-label="Controles de reprodução"
-      className="sticky bottom-0 z-20 -mx-4 border-t border-border bg-surface/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur"
+      className="sticky bottom-0 z-20 -mx-4 border-t border-border bg-surface/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur print:hidden"
     >
       <div className="mx-auto flex max-w-5xl flex-col gap-2">
         <div className="grid grid-cols-4 gap-2">
@@ -51,6 +97,11 @@ export function TransportBar({ index, total, playing, speed, canPrev, canNext, o
           <span>
             Nota {index + 1} de {total}
           </span>
+          {trainerSpeed !== null && (
+            <span className="font-semibold text-accent-strong" role="status">
+              Treino: {Math.round(trainerSpeed * 100)}%
+            </span>
+          )}
           <label className="flex items-center gap-2">
             Velocidade
             <select

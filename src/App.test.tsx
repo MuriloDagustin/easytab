@@ -21,6 +21,7 @@ vi.mock('./audio/player', async () => {
       dispose = vi.fn()
       setTimbre = vi.fn()
       setLoadingListener = vi.fn()
+      setBaseMs = vi.fn()
     },
   }
 })
@@ -109,7 +110,7 @@ describe('fluxo principal', () => {
     await user.type(input, 'Intro{Enter}')
     await user.click(screen.getByRole('button', { name: /^Intro/ }))
     expect(screen.getByText(/Passo 4 de 11/)).toBeInTheDocument()
-    expect(screen.getByText('Intro')).toBeInTheDocument()
+    expect(screen.getAllByText('Intro').length).toBeGreaterThan(0)
   })
 
   it('filtra por corda e navega só nela', async () => {
@@ -165,5 +166,59 @@ describe('fluxo principal', () => {
     await user.click(screen.getByRole('button', { name: 'Reproduzir a sequência' }))
     expect(await screen.findByText(/Passo 1 de 11/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reproduzir a sequência' })).toBeInTheDocument()
+  })
+
+  it('abre o diagrama do acorde ao tocar na cifra e fecha com Esc', async () => {
+    localStorage.clear()
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: /Colar tablatura/ }))
+    await user.type(
+      screen.getByLabelText('Tablatura em texto'),
+      '   G{Enter}e|--3--|{Enter}B|-----|{Enter}G|-----|{Enter}D|-----|{Enter}A|-----|{Enter}E|-----|',
+    )
+    await user.click(screen.getByRole('button', { name: 'Processar tablatura' }))
+    await user.click(screen.getByRole('button', { name: 'Ver acorde G' }))
+    expect(screen.getByRole('dialog', { name: 'Acorde G' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Diagrama do acorde G' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await user.click(screen.getByRole('button', { name: /Acorde G · ver forma/ }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('imprime, mostra partitura, modo canhoto e outras posições', async () => {
+    const print = vi.spyOn(window, 'print').mockImplementation(() => {})
+    const user = await openExample()
+    await user.click(screen.getByRole('button', { name: 'Imprimir' }))
+    expect(print).toHaveBeenCalled()
+    await user.click(screen.getByLabelText('Partitura'))
+    expect(document.querySelector('[data-staff]')).toBeInTheDocument()
+    await user.click(screen.getByLabelText('Canhoto'))
+    expect(screen.getByRole('img', { name: /visão de canhoto/ })).toBeInTheDocument()
+    await user.click(screen.getByLabelText(/mesma nota em outras posições/))
+    // 3ª corda solta (G3) = 4ª corda casa 5 = 5ª corda casa 10 = 6ª corda casa 15.
+    expect(screen.getByText(/4ª corda casa 5, 5ª corda casa 10, 6ª corda casa 15/)).toBeInTheDocument()
+    expect(document.querySelector('[data-alt-string="4"][data-alt-fret="5"]')).toBeInTheDocument()
+  })
+
+  it('grava o ritmo tocando junto pelo espaço', async () => {
+    const user = await openExample()
+    await user.click(screen.getByRole('button', { name: /Gravar ritmo tocando junto/ }))
+    expect(screen.getByRole('toolbar', { name: 'Gravação de ritmo' })).toBeInTheDocument()
+    for (let i = 0; i < 4; i++) await user.keyboard(' ')
+    expect(screen.getByText('4 de 11 notas')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Concluir' }))
+    expect(screen.queryByRole('toolbar', { name: 'Gravação de ritmo' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Apagar ritmo gravado' })).toBeInTheDocument()
+    await vi.waitFor(() => expect(localStorage.getItem(LIBRARY_KEY)).toContain('"recorded"'))
+  })
+
+  it('mostra a sequência de dias na tela inicial depois de praticar', async () => {
+    const user = await openExample()
+    await user.click(screen.getByRole('button', { name: 'Reproduzir a sequência' }))
+    await user.click(screen.getByRole('button', { name: 'Minhas tablaturas' }))
+    expect(screen.getByText(/1 dia seguido de prática/)).toBeInTheDocument()
+    expect(screen.getByText('Você já praticou hoje.')).toBeInTheDocument()
   })
 })

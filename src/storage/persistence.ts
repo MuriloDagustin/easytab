@@ -1,5 +1,7 @@
 import { EMPTY_RHYTHM, type RhythmAnnotations } from '../domain/rhythm'
 import { DEFAULT_TIMBRE, INSTRUMENTS, type Timbre } from '../audio/instruments'
+import { DRUM_PATTERNS, type DrumPattern } from '../audio/beat'
+import { DEFAULT_SPEED_TRAINER, type SpeedTrainer } from '../domain/speedTrainer'
 
 export const LIBRARY_KEY = 'tabfacil:library:v2'
 export const PREFS_KEY = 'tabfacil:prefs:v2'
@@ -11,12 +13,21 @@ export interface ViewPreferences {
   showPitches: boolean
   /** Tablatura desenhada (linhas e números) ou o texto original em fonte mono. */
   tabStyle: 'graphic' | 'text'
+  leftHanded: boolean
+  showAlternates: boolean
+  showNotation: boolean
 }
 
 export interface GlobalPrefs {
   viewPrefs: ViewPreferences
   countIn: boolean
   timbre: Timbre
+  metronome: boolean
+  drums: DrumPattern
+  playRepeats: boolean
+  speedTrainer: SpeedTrainer
+  /** Dias (AAAA-MM-DD) em que houve prática, para a sequência de dias. */
+  practiceDays: string[]
 }
 
 export interface PracticeRecord {
@@ -54,9 +65,21 @@ export const DEFAULT_VIEW_PREFS: ViewPreferences = {
   showFingers: true,
   showPitches: true,
   tabStyle: 'graphic',
+  leftHanded: false,
+  showAlternates: false,
+  showNotation: false,
 }
 
-export const DEFAULT_PREFS: GlobalPrefs = { viewPrefs: DEFAULT_VIEW_PREFS, countIn: true, timbre: DEFAULT_TIMBRE }
+export const DEFAULT_PREFS: GlobalPrefs = {
+  viewPrefs: DEFAULT_VIEW_PREFS,
+  countIn: true,
+  timbre: DEFAULT_TIMBRE,
+  metronome: false,
+  drums: 'off',
+  playRepeats: true,
+  speedTrainer: DEFAULT_SPEED_TRAINER,
+  practiceDays: [],
+}
 
 export function newTabId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -94,6 +117,9 @@ function sanitizeTab(raw: Partial<SavedTab>): SavedTab | null {
     rhythm: {
       durations: raw.rhythm?.durations ?? {},
       pausesAfter: Array.isArray(raw.rhythm?.pausesAfter) ? raw.rhythm.pausesAfter : [],
+      ...(raw.rhythm?.recorded && typeof raw.rhythm.recorded.baseMs === 'number'
+        ? { recorded: { baseMs: raw.rhythm.recorded.baseMs, units: raw.rhythm.recorded.units ?? {} } }
+        : {}),
     },
     hardEvents: Array.isArray(raw.hardEvents) ? raw.hardEvents : [],
     practice: raw.practice ?? {},
@@ -154,6 +180,11 @@ export function loadPrefs(): GlobalPrefs {
       viewPrefs: { ...DEFAULT_VIEW_PREFS, ...(parsed.viewPrefs ?? {}) },
       countIn: parsed.countIn !== false,
       timbre: INSTRUMENTS.some((i) => i.id === parsed.timbre) ? (parsed.timbre as Timbre) : DEFAULT_TIMBRE,
+      metronome: parsed.metronome === true,
+      drums: DRUM_PATTERNS.some((d) => d.id === parsed.drums) ? (parsed.drums as DrumPattern) : 'off',
+      playRepeats: parsed.playRepeats !== false,
+      speedTrainer: { ...DEFAULT_SPEED_TRAINER, ...(parsed.speedTrainer ?? {}) },
+      practiceDays: Array.isArray(parsed.practiceDays) ? parsed.practiceDays.filter((d) => typeof d === 'string') : [],
     }
   } catch {
     return DEFAULT_PREFS

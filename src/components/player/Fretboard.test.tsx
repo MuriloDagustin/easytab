@@ -114,4 +114,32 @@ describe('Fretboard', () => {
     await userEvent.click(button)
     expect(onPlayString).toHaveBeenCalledWith(6)
   })
+
+  it('espelha no modo canhoto', () => {
+    const note = event([{ string: 2, fret: 5, techniques: [] }])
+    const x = (leftHanded: boolean) =>
+      Number(
+        render(<Fretboard event={note} minFret={4} maxFret={8} fingers={null} showFingers setup={DEFAULT_SETUP} leftHanded={leftHanded} />)
+          .container.querySelector('[data-string="2"][data-fret="5"] circle')!
+          .getAttribute('cx'),
+      )
+    const right = x(false)
+    const left = x(true)
+    expect(left).not.toBe(right)
+  })
+
+  it('desenha outras posições da mesma nota', () => {
+    const { container } = render(
+      <Fretboard
+        event={event([{ string: 1, fret: 0, techniques: [] }])}
+        minFret={1}
+        maxFret={15}
+        fingers={null}
+        showFingers
+        setup={DEFAULT_SETUP}
+        alternates={[{ string: 2, fret: 5 }, { string: 3, fret: 9 }]}
+      />,
+    )
+    expect(container.querySelectorAll('[data-alt-string]')).toHaveLength(2)
+  })
 })

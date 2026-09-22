@@ -49,6 +49,19 @@ O PWA (service worker e manifesto) só funciona no build de produção: rode
   de prática por tab. Trechos marcados como difíceis e notas com muitos erros aparecem em
   "Revisão", com um botão que monta um loop curto para praticar.
 - **Compartilhar por link.** A tab, a afinação e o capo vão codificados na URL.
+- **Treino de velocidade.** Repete o trecho e sobe a velocidade a cada volta até um alvo.
+- **Metrônomo e bateria.** Clique contínuo e duas batidas simples de bateria durante a reprodução.
+- **Ritmo gravado tocando junto.** Com a música original tocando, o aluno aperta espaço a cada
+  nota; o app mede os intervalos e usa esse andamento e essas durações na reprodução.
+- **Repetições da tab.** "2X", "2 vezes" no título da seção e "x2" no fim das linhas são tocados
+  de verdade, com opção de desligar.
+- **Afinador cromático** pelo microfone, com ponteiro e indicação de apertar ou soltar a tarraxa.
+- **Diagrama de acorde** ao tocar numa cifra: forma aberta quando existe, senão pestana na
+  posição mais baixa, com a digitação.
+- **Partitura acima da tab**, opcional, na clave de sol de guitarra.
+- **Modo canhoto** no braço e nos diagramas, e **outras posições da mesma nota** no braço.
+- **Sequência de dias e pontuação** da prática com microfone, com estrelas por aproveitamento.
+- **Impressão ou PDF** da tablatura, em preto no branco.
 
 ## Estrutura
 
@@ -90,3 +103,9 @@ O PWA (service worker e manifesto) só funciona no build de produção: rode
 - **Sugestão de dedo.** Só aparece quando o trecho cabe em uma posição de 4 casas.
   Fora disso o app mostra apenas a posição.
 - **Cifras.** Reconhecidas quando escritas sozinhas na linha imediatamente acima do bloco.
+  Os diagramas valem para afinação padrão e simplificam extensões como 7(9) e baixo invertido.
+- **Partitura.** Mostra as alturas, sem duração: todas as notas aparecem como semínimas e sem
+  armadura de clave, sempre com sustenidos.
+- **Repetições.** Uma seção vai do título até o próximo título de seção; observações soltas não
+  quebram a seção. Instruções como "volta ao refrão" não são interpretadas.
+- **Metrônomo e bateria.** Seguem a unidade de tempo do app, não um compasso real da música.

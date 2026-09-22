@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState, type Dispatch } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from 'react'
 import { TabPlayer } from '../../audio/player'
 import { suggestFingersSequence } from '../../domain/fingering/suggest'
+import { alternatePositions, type Position } from '../../domain/music/positions'
 import { fretToNoteName, getTuning, type Setup } from '../../domain/music/tuning'
 import { reviewRange, suggestReview } from '../../domain/review'
-import { eventUnits } from '../../domain/rhythm'
+import { baseMsOf, eventUnits, rhythmFromTaps } from '../../domain/rhythm'
+import { speedForLoop } from '../../domain/speedTrainer'
+import { currentStreak, dayKey } from '../../domain/streak'
+import { orderFrom, playbackOrder } from '../../domain/tab/playback'
 import type { ParsedTab, StringNumber } from '../../domain/tab/types'
 import { buildShareUrl } from '../../share/url'
 import { visibleIndices, type AppAction, type AppState } from '../../state/appReducer'
@@ -11,6 +15,7 @@ import type { SavedTab } from '../../storage/persistence'
 import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
+import { ChordDialog } from './ChordDiagram'
 import { Controls } from './Controls'
 import { Fretboard } from './Fretboard'
 import { InstructionCard } from './InstructionCard'
@@ -22,6 +27,7 @@ import { SetupControls } from './SetupControls'
 import { TabGraphic } from './TabGraphic'
 import { TabView } from './TabView'
 import { TransportBar } from './TransportBar'
+import { Tuner } from './Tuner'
 import { usePractice } from './usePractice'
 
 interface Props {
@@ -41,6 +47,10 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [shareMessage, setShareMessage] = useState<string | null>(null)
   const [loadingSamples, setLoadingSamples] = useState(false)
+  const [trainerSpeed, setTrainerSpeed] = useState<number | null>(null)
+  const [openChord, setOpenChord] = useState<string | null>(null)
+  const [recording, setRecording] = useState<{ order: number[]; tapped: number } | null>(null)
+  const taps = useRef<number[]>([])
 
   useEffect(() => {
     player.setLoadingListener(setLoadingSamples)
@@ -50,6 +60,10 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
   useEffect(() => {
     player.setTimbre(prefs.timbre)
   }, [player, prefs.timbre])
+
+  useEffect(() => {
+    player.setBaseMs(baseMsOf(saved.rhythm))
+  }, [player, saved.rhythm])
 
   const setup: Setup = useMemo(() => ({ tuning: getTuning(saved.tuningId), capo: saved.capo }), [saved.tuningId, saved.capo])
   const event = tab.events[Math.min(currentIndex, tab.events.length - 1)]
@@ -62,14 +76,36 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
     [event, stringFilter],
   )
 
+  const alternates: Position[] = useMemo(() => {
+    if (!prefs.viewPrefs.showAlternates) return []
+    const current = new Set(displayedEvent.notes.map((n) => `${n.string}:${n.fret}`))
+    const seen = new Set<string>()
+    return displayedEvent.notes
+      .filter((n) => !n.muted)
+      .flatMap((n) => alternatePositions(n.string, n.fret, setup))
+      .filter((p) => {
+        const key = `${p.string}:${p.fret}`
+        if (current.has(key) || seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+  }, [displayedEvent, setup, prefs.viewPrefs.showAlternates])
+
   const fretRange = useMemo(() => {
+    if (prefs.viewPrefs.showAlternates) {
+      const max = Math.max(15, ...displayedEvent.notes.map((n) => n.fret))
+      return { min: 1, max }
+    }
     const frets = displayedEvent.notes.filter((n) => !n.muted).map((n) => n.fret).filter((f) => f > 0)
     const targets = displayedEvent.notes.map((n) => n.targetFret).filter((f): f is number => f !== undefined && f > 0)
     const all = [...frets, ...targets]
     if (!all.length) return { min: 1, max: FRET_WINDOW }
     const min = Math.max(1, Math.min(...all) - 1)
     return { min, max: Math.max(...all, min + FRET_WINDOW - 1) }
-  }, [displayedEvent])
+  }, [displayedEvent, prefs.viewPrefs.showAlternates])
+
+  const hasRepeats = tab.blocks.some((b) => b.sectionRepeat || b.repeat)
+  const streak = currentStreak(prefs.practiceDays, dayKey(new Date()))
 
   const fingerSequence = useMemo(() => suggestFingersSequence(tab.events), [tab.events])
   const fingers = fingerSequence[currentIndex] ?? null
@@ -93,27 +129,46 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
   function stopPlayback() {
     player.pause()
     setCountdown(null)
+    setTrainerSpeed(null)
     dispatch({ type: 'setPlaying', playing: false })
   }
 
   async function startPlayback() {
-    const order = saved.loopEnabled
-      ? visible.filter((id) => id >= saved.loopStart && id <= saved.loopEnd)
-      : visible.filter((id) => id >= currentIndex)
-    const fallback = saved.loopEnabled ? visible.filter((id) => id >= saved.loopStart && id <= saved.loopEnd) : visible
+    const visibleSet = new Set(visible)
+    const trainer = prefs.speedTrainer.enabled
+    const inLoop = visible.filter((id) => id >= saved.loopStart && id <= saved.loopEnd)
+    const full = playbackOrder(tab, (id) => visibleSet.has(id), prefs.playRepeats)
+    let order: number[]
+    let fallback: number[]
+    if (saved.loopEnabled) {
+      order = inLoop
+      fallback = inLoop
+    } else if (trainer) {
+      order = full
+      fallback = full
+    } else {
+      order = orderFrom(full, currentIndex)
+      fallback = full
+    }
     dispatch({ type: 'setPlaying', playing: true })
+    dispatch({ type: 'markPracticeDay' })
     try {
       await player.playSequence({
         events: tab.events,
         order: order.length ? order : fallback,
         speed: saved.speed,
-        loop: saved.loopEnabled,
+        loop: saved.loopEnabled || trainer,
         setup,
         unitsOf,
         countIn: prefs.countIn,
+        metronome: prefs.metronome,
+        drums: prefs.drums,
+        speedForLoop: trainer ? (loop) => speedForLoop(prefs.speedTrainer, loop) : undefined,
+        onLoop: (_, speed) => setTrainerSpeed(speed),
         onCountIn: (beats) => setCountdown(beats > 0 ? beats : null),
         onEvent: (index) => dispatch({ type: 'setIndex', index }),
         onFinish: () => {
+          setTrainerSpeed(null)
           dispatch({ type: 'setPlaying', playing: false })
           // Ao terminar, volta ao começo para o próximo play tocar tudo de novo.
           dispatch({ type: 'setIndex', index: fallback[0] ?? 0 })
@@ -140,10 +195,62 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
     dispatch({ type: 'next' })
   }
 
+  function startRecording() {
+    stopPlayback()
+    const order = saved.loopEnabled
+      ? visible.filter((id) => id >= saved.loopStart && id <= saved.loopEnd)
+      : visible.filter((id) => id >= currentIndex)
+    if (order.length < 2) return
+    taps.current = []
+    setRecording({ order, tapped: 0 })
+    dispatch({ type: 'setIndex', index: order[0] })
+  }
+
+  const finishRecording = useCallback(
+    (order: number[]) => {
+      const recorded = rhythmFromTaps(order, taps.current)
+      setRecording(null)
+      taps.current = []
+      if (recorded) {
+        dispatch({ type: 'recordRhythm', recorded })
+        dispatch({ type: 'markPracticeDay' })
+      }
+      dispatch({ type: 'setIndex', index: order[0] })
+    },
+    [dispatch],
+  )
+
+  function tap() {
+    if (!recording) return
+    taps.current.push(performance.now())
+    const tapped = taps.current.length
+    if (tapped >= recording.order.length) {
+      finishRecording(recording.order)
+      return
+    }
+    setRecording({ ...recording, tapped })
+    dispatch({ type: 'setIndex', index: recording.order[tapped] })
+  }
+
+  function cancelRecording() {
+    taps.current = []
+    setRecording(null)
+  }
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null
       if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+      if (openChord) return
+      if (recording) {
+        if (e.code === 'Space') {
+          e.preventDefault()
+          tap()
+        } else if (e.key === 'Escape') {
+          cancelRecording()
+        }
+        return
+      }
       if (e.code === 'Space') {
         e.preventDefault()
         togglePlay()
@@ -186,10 +293,13 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4">
-      <header className="flex flex-wrap items-center justify-between gap-2">
+      <header className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold">Tab Fácil</h1>
-          <p className="truncate text-sm text-muted">{saved.name}</p>
+          <p className="truncate text-sm text-muted">
+            {saved.name}
+            {streak > 0 && <span className="ml-2 text-accent-strong">🔥 {streak} dia{streak > 1 ? 's' : ''} seguido{streak > 1 ? 's' : ''}</span>}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => void share()}>Compartilhar</Button>
@@ -198,6 +308,7 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
         </div>
       </header>
 
+      <div className="flex flex-col gap-4 empty:hidden print:hidden">
       {state.notice && (
         <Alert tone="info">
           <div className="flex items-center justify-between gap-3">
@@ -220,10 +331,27 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
           </ul>
         </Alert>
       )}
+      </div>
 
       <Card
+        className="print-area"
         title="Tablatura"
         action={
+          <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+          {prefs.viewPrefs.tabStyle === 'graphic' && (
+            <label className="flex items-center gap-1.5 text-xs text-muted normal-case">
+              <input
+                type="checkbox"
+                checked={prefs.viewPrefs.showNotation}
+                onChange={(e) => dispatch({ type: 'setPref', key: 'showNotation', value: e.target.checked })}
+                className="size-4 accent-[#f5b942]"
+              />
+              Partitura
+            </label>
+          )}
+          <Button variant="ghost" className="min-h-8! px-2! py-1! text-xs" onClick={() => window.print()}>
+            Imprimir
+          </Button>
           <div role="radiogroup" aria-label="Estilo da tablatura" className="inline-flex rounded-lg border border-border p-0.5">
             {(['graphic', 'text'] as const).map((style) => (
               <button
@@ -239,8 +367,16 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
               </button>
             ))}
           </div>
+          </div>
         }
       >
+        <div className="mb-3 hidden print:block" aria-hidden>
+          <p className="text-xl font-bold">{saved.name}</p>
+          <p className="text-sm">
+            Afinação: {setup.tuning.name}
+            {setup.capo > 0 && ` · capotraste na casa ${setup.capo}`}
+          </p>
+        </div>
         {prefs.viewPrefs.tabStyle === 'graphic' ? (
           <TabGraphic
             tab={tab}
@@ -248,6 +384,8 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
             hardEvents={saved.hardEvents}
             stringFilter={stringFilter}
             setup={setup}
+            showNotation={prefs.viewPrefs.showNotation}
+            onChord={setOpenChord}
             onSelect={(index) => {
               if (playing) stopPlayback()
               dispatch({ type: 'setIndex', index })
@@ -265,12 +403,13 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
             }}
           />
         )}
-        <p className="mt-3 text-xs text-muted">
-          Toque em qualquer nota para ir direto até ela. Notas em vermelho estão marcadas como difíceis.
+        <p className="mt-3 text-xs text-muted print:hidden">
+          Toque em qualquer nota para ir direto até ela. Notas em vermelho estão marcadas como difíceis. Toque numa
+          cifra para ver a forma do acorde.
         </p>
       </Card>
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2 print:hidden">
         <Card title="O que fazer agora">
           {countdown !== null ? (
             <div role="status" aria-live="assertive" className="flex min-h-40 flex-col items-center justify-center">
@@ -286,6 +425,7 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
               setup={setup}
               isHard={isHard}
               section={tab.blocks[event.blockIndex]?.heading}
+              onChord={setOpenChord}
             />
           )}
         </Card>
@@ -311,8 +451,37 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
             fingers={fingers}
             showFingers={prefs.viewPrefs.showFingers}
             setup={setup}
+            leftHanded={prefs.viewPrefs.leftHanded}
+            alternates={alternates}
             onPlayString={(s: StringNumber) => void player.playOpenString(s, setup).catch(() => setAudioError('Não consegui iniciar o som.'))}
           />
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+            <label className="flex min-h-8 items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={prefs.viewPrefs.leftHanded}
+                onChange={(e) => dispatch({ type: 'setPref', key: 'leftHanded', value: e.target.checked })}
+                className="size-4 accent-[#f5b942]"
+              />
+              Canhoto
+            </label>
+            <label className="flex min-h-8 items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={prefs.viewPrefs.showAlternates}
+                onChange={(e) => dispatch({ type: 'setPref', key: 'showAlternates', value: e.target.checked })}
+                className="size-4 accent-[#f5b942]"
+              />
+              Mostrar a mesma nota em outras posições
+            </label>
+          </div>
+          {prefs.viewPrefs.showAlternates && (
+            <p className="mt-1 text-xs text-string">
+              {alternates.length
+                ? `Círculos tracejados: mesma nota em ${alternates.map((p) => `${p.string}ª corda casa ${p.fret}`).join(', ')}.`
+                : 'Esta nota não aparece em outra posição até a casa 15.'}
+            </p>
+          )}
           <p className="mt-2 text-xs text-muted">
             Círculo vazado = corda solta. Círculo cheio = casa pressionada. X vermelho = corda abafada. Toque na
             letra da corda para ouvi-la solta.
@@ -321,7 +490,7 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
         </Card>
       </div>
 
-      <Card title="Reprodução">
+      <Card title="Reprodução" className="print:hidden">
         <Controls
           visiblePosition={visiblePosition + 1}
           visibleTotal={visible.length}
@@ -342,13 +511,22 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
             stopPlayback()
             dispatch({ type: 'setStringFilter', string })
           }}
+          metronome={prefs.metronome}
+          drums={prefs.drums}
+          playRepeats={prefs.playRepeats}
+          hasRepeats={hasRepeats}
+          trainer={prefs.speedTrainer}
+          onMetronome={(value) => dispatch({ type: 'setMetronome', value })}
+          onDrums={(pattern) => dispatch({ type: 'setDrums', pattern })}
+          onPlayRepeats={(value) => dispatch({ type: 'setPlayRepeats', value })}
+          onTrainer={(patch) => dispatch({ type: 'setSpeedTrainer', patch })}
         />
         <p className="mt-3 text-xs text-muted">
           Atalhos: espaço toca ou pausa, seta direita avança, seta esquerda volta.
         </p>
       </Card>
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2 print:hidden">
         <Card title="Ritmo e dificuldade">
           <RhythmControls
             eventId={currentIndex}
@@ -357,6 +535,9 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
             onDuration={(duration) => dispatch({ type: 'setDuration', duration })}
             onTogglePause={() => dispatch({ type: 'togglePause' })}
             onToggleHard={() => dispatch({ type: 'toggleHard' })}
+            recording={recording !== null}
+            onStartRecording={startRecording}
+            onClearRecorded={() => dispatch({ type: 'clearRecordedRhythm' })}
           />
         </Card>
 
@@ -370,15 +551,19 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
             onCapo={(capo) => dispatch({ type: 'setCapo', capo })}
             onTimbre={(timbre) => dispatch({ type: 'setTimbre', timbre })}
           />
+          <div className="mt-4">
+            <Tuner setup={setup} />
+          </div>
         </Card>
       </div>
 
-      <Card title="Praticar com escuta">
+      <Card title="Praticar com escuta" className="print:hidden">
         <PracticePanel
           status={practice.status}
           reading={practice.reading}
           expected={expectedNames}
           error={practice.error}
+          session={practice.session}
           onToggle={() => {
             stopPlayback()
             practice.toggle()
@@ -386,7 +571,7 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
         />
       </Card>
 
-      <Card title="Revisão">
+      <Card title="Revisão" className="print:hidden">
         <ReviewPanel
           suggestions={suggestions}
           practice={saved.practice}
@@ -399,6 +584,7 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
       </Card>
 
       <Card
+        className="print:hidden"
         title="Como ler a tablatura"
         action={
           <Button variant="ghost" onClick={() => dispatch({ type: 'setPref', key: 'showLegend', value: !prefs.viewPrefs.showLegend })}>
@@ -413,7 +599,7 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
         )}
       </Card>
 
-      <div className="flex justify-center pt-2">
+      <div className="flex justify-center pt-2 print:hidden">
         <Button variant="danger" onClick={onClearAll}>
           Apagar dados salvos
         </Button>
@@ -431,7 +617,26 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
         onPlayEvent={() => void playCurrent()}
         onTogglePlay={togglePlay}
         onSpeed={(speed) => dispatch({ type: 'setSpeed', speed })}
+        trainerSpeed={trainerSpeed}
+        recording={
+          recording && {
+            tapped: recording.tapped,
+            total: recording.order.length,
+            onTap: tap,
+            onFinish: () => finishRecording(recording.order),
+            onCancel: cancelRecording,
+          }
+        }
       />
+
+      {openChord && (
+        <ChordDialog
+          name={openChord}
+          leftHanded={prefs.viewPrefs.leftHanded}
+          standardTuning={setup.tuning.id === 'standard'}
+          onClose={() => setOpenChord(null)}
+        />
+      )}
     </div>
   )
 }

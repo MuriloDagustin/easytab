@@ -23,19 +23,29 @@ interface RawLine {
   label: string | null
   bodyOffset: number
   body: string
+  repeat?: number
 }
+
+const REPEAT_SUFFIX = /\s+(?:[xX×]\s*(\d{1,2})|(\d{1,2})\s*[xX×])\s*$/
+const HEADING_REPEAT = /(?:^|[\s*(])(\d{1,2})\s*(?:[xX×]|vezes)(?=$|[\s*).,:])|(?:^|[\s(])[xX×]\s*(\d{1,2})(?=$|[\s).])/i
+const MAX_REPEAT = 8
 
 interface Decoration {
   chordLine?: string
   palmMuteRanges: Array<[number, number]>
 }
 
-function matchLine(text: string): RawLine | null {
+function matchLine(original: string): RawLine | null {
+  const suffix = REPEAT_SUFFIX.exec(original)
+  const text = suffix ? original.slice(0, suffix.index) : original
   const m = TAB_LINE.exec(text)
   if (!m) return null
   const [, label, , body] = m
   if (!BODY_HAS_DASHES.test(body)) return null
-  return { text, label: label ?? null, bodyOffset: text.length - body.length, body }
+  const line: RawLine = { text, label: label ?? null, bodyOffset: text.length - body.length, body }
+  const count = suffix ? Number(suffix[1] ?? suffix[2]) : 0
+  if (count >= 2 && count <= MAX_REPEAT) line.repeat = count
+  return line
 }
 
 function isChordLine(text: string): boolean {
@@ -97,13 +107,25 @@ const SECTION_MARKER = /^\s*(\[.+\]|Parte \d+ de \d+|\d+[ºª°]? ?[A-ZÀ-Ú][A-
  * Quando há marcadores de seção ("[Solo 1]", "Parte 2 de 6", "2º RIFF"), só eles
  * entram; assim a letra da música que vem antes não engole o título.
  */
-function headingFor(group: Group, decoration: Decoration): string | undefined {
+interface HeadingInfo {
+  heading?: string
+  sectionStart: boolean
+  sectionRepeat?: number
+}
+
+function headingFor(group: Group, decoration: Decoration): HeadingInfo {
   const lines = group.heading.filter((l) => l !== decoration.chordLine && !PALM_MUTE_LINE.test(l))
   const clean = (l: string) => l.replace(/\\/g, '').replace(/\s+/g, ' ').trim()
   const markers = lines.filter((l) => SECTION_MARKER.test(l)).map(clean)
+  const repeats = lines
+    .map((l) => HEADING_REPEAT.exec(l))
+    .map((m) => (m ? Number(m[1] ?? m[2]) : 0))
+    .filter((n) => n >= 2 && n <= MAX_REPEAT)
+  const info: HeadingInfo = { sectionStart: markers.length > 0 || repeats.length > 0 }
+  if (repeats.length) info.sectionRepeat = Math.max(...repeats)
   const text = (markers.length ? markers : lines.map(clean)).filter(Boolean).join(' ')
-  if (!text) return undefined
-  return text.length > MAX_HEADING ? `${text.slice(0, MAX_HEADING - 1)}…` : text
+  if (text) info.heading = text.length > MAX_HEADING ? `${text.slice(0, MAX_HEADING - 1)}…` : text
+  return info
 }
 
 function orderByLabels(lines: RawLine[]): RawLine[] {
@@ -242,8 +264,12 @@ function parseBlock(
     bodyLength: length,
   }
   if (decoration.chordLine) block.chordLine = decoration.chordLine
-  const heading = headingFor(group, decoration)
-  if (heading) block.heading = heading
+  const info = headingFor(group, decoration)
+  if (info.heading) block.heading = info.heading
+  if (info.sectionStart) block.sectionStart = true
+  if (info.sectionRepeat) block.sectionRepeat = info.sectionRepeat
+  const lineRepeat = Math.max(0, ...ordered.map((l) => l.repeat ?? 0))
+  if (lineRepeat) block.repeat = lineRepeat
   return { block, events }
 }
 

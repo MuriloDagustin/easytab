@@ -48,6 +48,12 @@ export interface TabBlock {
   chordLine?: string
   /** Texto livre acima do bloco: título de seção, observação do autor. */
   heading?: string
+  /** O bloco abre uma seção nova (título como "[Solo 1]" ou "Parte 2 de 6"). */
+  sectionStart?: boolean
+  /** Quantas vezes a seção iniciada por este bloco se repete ("2X", "2 vezes"). */
+  sectionRepeat?: number
+  /** Quantas vezes só este bloco se repete ("x2" no fim da linha). */
+  repeat?: number
 }
 
 export interface ParsedTab {

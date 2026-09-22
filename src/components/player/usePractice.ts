@@ -23,6 +23,7 @@ export function usePractice({ event, setup, onHit, onMiss, onAdvance }: Options)
   const [hitEventId, setHitEventId] = useState<number | null>(null)
   const [reading, setReading] = useState<PitchReading | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [session, setSession] = useState({ hits: 0, misses: 0 })
   const listener = useRef<MicListener | null>(null)
   const matchSince = useRef<number | null>(null)
   const wrongSince = useRef<number | null>(null)
@@ -63,6 +64,7 @@ export function usePractice({ event, setup, onHit, onMiss, onAdvance }: Options)
       if (now - matchSince.current >= HOLD_MS) {
         advancing.current = true
         setHitEventId(current.id)
+        setSession((v) => ({ ...v, hits: v.hits + 1 }))
         hit(current.id)
         setTimeout(advance, ADVANCE_MS)
       }
@@ -74,6 +76,7 @@ export function usePractice({ event, setup, onHit, onMiss, onAdvance }: Options)
       if (wrongSince.current === null) wrongSince.current = now
       if (!missRecorded.current && now - wrongSince.current >= MISS_MS) {
         missRecorded.current = true
+        setSession((v) => ({ ...v, misses: v.misses + 1 }))
         miss(current.id)
       }
     } else {
@@ -83,6 +86,7 @@ export function usePractice({ event, setup, onHit, onMiss, onAdvance }: Options)
 
   const start = useCallback(async () => {
     setError(null)
+    setSession({ hits: 0, misses: 0 })
     setBaseStatus('starting')
     const mic = new MicListener()
     listener.current = mic
@@ -106,5 +110,5 @@ export function usePractice({ event, setup, onHit, onMiss, onAdvance }: Options)
   useEffect(() => () => listener.current?.stop(), [])
 
   const status: PracticeStatus = active && hitEventId === event.id ? 'hit' : baseStatus
-  return { status, reading, error, toggle, active }
+  return { status, reading, error, toggle, active, session }
 }

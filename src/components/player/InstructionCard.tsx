@@ -11,9 +11,10 @@ interface Props {
   isHard: boolean
   /** Título de seção ou observação escrita acima do bloco na tablatura original. */
   section?: string
+  onChord?: (name: string) => void
 }
 
-export function InstructionCard({ event, position, total, showPitches, setup, isHard, section }: Props) {
+export function InstructionCard({ event, position, total, showPitches, setup, isHard, section, onChord }: Props) {
   const description = describeEvent(event, setup)
   return (
     <div aria-live="polite">
@@ -26,11 +27,18 @@ export function InstructionCard({ event, position, total, showPitches, setup, is
         <span>
           Passo {position} de {total}
         </span>
-        {description.chord && (
-          <span className="rounded-md bg-accent/15 px-2 py-0.5 font-semibold text-accent-strong normal-case">
-            Acorde {description.chord}
-          </span>
-        )}
+        {description.chord &&
+          (onChord ? (
+            <button
+              type="button"
+              onClick={() => onChord(description.chord!)}
+              className="rounded-md bg-accent/15 px-2 py-0.5 font-semibold text-accent-strong normal-case underline decoration-dotted hover:bg-accent/25"
+            >
+              Acorde {description.chord} · ver forma
+            </button>
+          ) : (
+            <span className="rounded-md bg-accent/15 px-2 py-0.5 font-semibold text-accent-strong normal-case">Acorde {description.chord}</span>
+          ))}
         {isHard && <span className="rounded-md bg-danger/15 px-2 py-0.5 font-semibold text-danger">Difícil</span>}
       </div>
       <p className="mt-2 text-xl leading-snug font-semibold sm:text-2xl">{description.main}</p>

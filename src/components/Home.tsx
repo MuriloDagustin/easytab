@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { bestStreak, currentStreak, dayKey, stars } from '../domain/streak'
 import type { SavedTab } from '../storage/persistence'
 import { Alert } from './ui/Alert'
 import { Button } from './ui/Button'
 
 interface Props {
   tabs: SavedTab[]
+  practiceDays: string[]
   parseError: string | null
   notice: string | null
   onPasteTab: () => void
@@ -35,6 +37,9 @@ function LibraryItem({
   const [name, setName] = useState(tab.name)
   const [confirming, setConfirming] = useState(false)
   const hard = tab.hardEvents.length
+  const records = Object.values(tab.practice)
+  const attempts = records.reduce((sum, r) => sum + r.attempts, 0)
+  const hits = records.reduce((sum, r) => sum + r.hits, 0)
 
   return (
     <li className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -65,6 +70,7 @@ function LibraryItem({
               {hard > 0 && ` · ${hard} trecho${hard > 1 ? 's' : ''} difícil${hard > 1 ? 'eis' : ''}`}
               {tab.tuningId !== 'standard' && ' · afinação alternativa'}
               {tab.capo > 0 && ` · capo ${tab.capo}`}
+              {attempts > 0 && ` · acerto ${Math.round((hits / attempts) * 100)}% ${'★'.repeat(stars(hits, attempts))}`}
             </span>
           </button>
         )}
@@ -96,6 +102,7 @@ function LibraryItem({
 
 export function Home({
   tabs,
+  practiceDays,
   parseError,
   notice,
   onPasteTab,
@@ -107,6 +114,10 @@ export function Home({
   onClearAll,
 }: Props) {
   const toReview = tabs.filter((t) => t.hardEvents.length > 0)
+  const today = dayKey(new Date())
+  const streak = currentStreak(practiceDays, today)
+  const best = bestStreak(practiceDays)
+  const practicedToday = practiceDays.includes(today)
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10 sm:py-16">
@@ -117,6 +128,20 @@ export function Home({
           apertar e como deve soar.
         </p>
       </header>
+
+      {practiceDays.length > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4" data-streak>
+          <div>
+            <p className="text-lg font-semibold">
+              🔥 {streak} dia{streak === 1 ? '' : 's'} seguido{streak === 1 ? '' : 's'} de prática
+            </p>
+            <p className="text-sm text-muted">
+              {practicedToday ? 'Você já praticou hoje.' : streak > 0 ? 'Pratique hoje para não perder a sequência.' : 'Comece uma nova sequência hoje.'}
+              {best > 1 && ` Melhor sequência: ${best} dias.`}
+            </p>
+          </div>
+        </div>
+      )}
 
       {notice && <Alert tone="info">{notice}</Alert>}
       {parseError && <Alert tone="error" title="Não consegui abrir essa tablatura">{parseError}</Alert>}

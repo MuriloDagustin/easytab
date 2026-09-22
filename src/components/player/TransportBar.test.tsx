@@ -53,4 +53,18 @@ describe('TransportBar', () => {
     setup()
     expect(screen.getByRole('toolbar', { name: 'Controles de reprodução' }).className).toContain('sticky bottom-0')
   })
+
+  it('vira o botão de gravação durante a gravação de ritmo', async () => {
+    const recording = { tapped: 3, total: 10, onTap: vi.fn(), onFinish: vi.fn(), onCancel: vi.fn() }
+    setup({ recording })
+    await userEvent.click(screen.getByRole('button', { name: /Toque aqui a cada nota/ }))
+    expect(recording.onTap).toHaveBeenCalled()
+    expect(screen.getByText('3 de 10 notas')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Próxima nota' })).toBeNull()
+  })
+
+  it('mostra a velocidade do treino enquanto ele roda', () => {
+    setup({ trainerSpeed: 0.65 })
+    expect(screen.getByText('Treino: 65%')).toBeInTheDocument()
+  })
 })
