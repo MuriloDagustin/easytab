@@ -3,6 +3,7 @@ import type { ParsedTab, StringNumber } from '../domain/tab/types'
 import { EMPTY_RHYTHM, setDuration, togglePause, type Duration, type RhythmAnnotations } from '../domain/rhythm'
 import { MAX_CAPO, getTuning } from '../domain/music/tuning'
 import type { SharePayload } from '../share/url'
+import type { Timbre } from '../audio/instruments'
 import {
   DEFAULT_PREFS,
   createSavedTab,
@@ -52,6 +53,7 @@ export type AppAction =
   | { type: 'setLoopRange'; start: number; end: number }
   | { type: 'setPref'; key: keyof ViewPreferences; value: boolean }
   | { type: 'setCountIn'; value: boolean }
+  | { type: 'setTimbre'; timbre: Timbre }
   | { type: 'setTuning'; tuningId: string }
   | { type: 'setCapo'; capo: number }
   | { type: 'setDuration'; duration: Duration }
@@ -269,6 +271,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, prefs: { ...state.prefs, viewPrefs: { ...state.prefs.viewPrefs, [action.key]: action.value } } }
     case 'setCountIn':
       return { ...state, prefs: { ...state.prefs, countIn: action.value } }
+    case 'setTimbre':
+      return { ...state, prefs: { ...state.prefs, timbre: action.timbre } }
     case 'setTuning':
       return updateCurrent(state, { tuningId: getTuning(action.tuningId).id })
     case 'setCapo':

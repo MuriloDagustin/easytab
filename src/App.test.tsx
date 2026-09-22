@@ -16,6 +16,8 @@ vi.mock('./audio/player', async () => {
       playSequence = vi.fn().mockResolvedValue(undefined)
       pause = vi.fn()
       dispose = vi.fn()
+      setTimbre = vi.fn()
+      setLoadingListener = vi.fn()
     },
   }
 })

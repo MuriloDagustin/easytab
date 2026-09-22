@@ -32,6 +32,11 @@ O PWA (service worker e manifesto) só funciona no build de produção: rode
   em SVG com sugestão de dedo quando a posição da mão é clara.
 - **Reprodução** com contagem regressiva, velocidade, repetição de trecho e ritmo manual
   (duração curta, normal ou longa e pausas por nota).
+- **Som com gravações reais** de violão de aço, guitarra elétrica e violão de nylon, mais um
+  sintetizador leve como alternativa. As amostras vêm do projeto
+  [tonejs-instruments](https://github.com/nbrosowsky/tonejs-instruments) (MIT), cortadas em
+  3,5 s, e são baixadas só quando você escolhe cada instrumento (cerca de 1 MB cada). Ficam
+  no cache do service worker para uso offline.
 - **Modo "uma corda de cada vez"** para estudar só as notas de uma corda.
 - **Afinações alternativas e capotraste**, refletidos nos nomes das cordas, no som e nas
   instruções. Toque na letra da corda no braço para ouvi-la solta e afinar.
@@ -52,7 +57,9 @@ O PWA (service worker e manifesto) só funciona no build de produção: rode
 | `src/domain/fingering/suggest.ts` | Sugestão de dedo mantendo a posição da mão |
 | `src/domain/rhythm.ts` | Anotações manuais de duração e pausa |
 | `src/domain/review.ts` | Sugestão de trechos para revisar |
-| `src/audio/player.ts` | Reprodução com Tone.js (carregado sob demanda) |
+| `src/audio/player.ts` | Reprodução: Sampler com amostras reais ou sintetizador (Tone.js sob demanda) |
+| `src/audio/instruments.ts` | Instrumentos disponíveis e mapa de amostras |
+| `public/samples/` | Amostras MP3 por instrumento (licença em `LICENSE.txt`) |
 | `src/audio/pitch.ts` | Detecção de altura pelo microfone |
 | `src/ocr/recognize.ts` | OCR com Tesseract.js por linha (carregado sob demanda) |
 | `src/share/url.ts` | Codificação da tab na URL |
@@ -69,8 +76,12 @@ O PWA (service worker e manifesto) só funciona no build de produção: rode
   Na primeira execução o Tesseract baixa o modelo da internet.
 - **Detecção de altura.** Funciona bem com uma nota por vez em ambiente silencioso. Em
   acordes, basta uma das notas esperadas ser detectada. Distorção e ruído confundem.
-- **Timbre.** A síntese é simples (onda triangular). As alturas estão corretas.
-- **Slide e bend no áudio.** Indicados por um segundo toque na nota de destino.
+- **Som.** As gravações têm uma nota a cada 2 ou 3 semitons; as outras são transpostas a
+  partir da mais próxima, o que soa natural nesse intervalo. Não há variação de timbre por
+  corda (a mesma nota na 2ª ou na 3ª corda soa igual). Na primeira vez, cada instrumento
+  precisa de internet para baixar as amostras; sem elas o app cai no sintetizador.
+- **Slide e bend no áudio.** Indicados por um segundo toque mais suave na nota de destino.
+  Hammer-on, pull-off e tapping saem com ataque mais fraco, mas sem ligadura real.
 - **Sugestão de dedo.** Só aparece quando o trecho cabe em uma posição de 4 casas.
   Fora disso o app mostra apenas a posição.
 - **Cifras.** Reconhecidas quando escritas sozinhas na linha imediatamente acima do bloco.

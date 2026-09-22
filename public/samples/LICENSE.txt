@@ -1,0 +1,4 @@
+Amostras de guitarra extraídas do projeto tonejs-instruments
+(https://github.com/nbrosowsky/tonejs-instruments), licença MIT,
+Copyright (c) 2018 Nicholaus P. Brosowsky. Cada arquivo foi cortado nos
+primeiros 3,5 segundos para reduzir o tamanho; nenhum foi recodificado.

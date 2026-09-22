@@ -1,4 +1,5 @@
 import { EMPTY_RHYTHM, type RhythmAnnotations } from '../domain/rhythm'
+import { DEFAULT_TIMBRE, INSTRUMENTS, type Timbre } from '../audio/instruments'
 
 export const LIBRARY_KEY = 'tabfacil:library:v2'
 export const PREFS_KEY = 'tabfacil:prefs:v2'
@@ -13,6 +14,7 @@ export interface ViewPreferences {
 export interface GlobalPrefs {
   viewPrefs: ViewPreferences
   countIn: boolean
+  timbre: Timbre
 }
 
 export interface PracticeRecord {
@@ -51,7 +53,7 @@ export const DEFAULT_VIEW_PREFS: ViewPreferences = {
   showPitches: true,
 }
 
-export const DEFAULT_PREFS: GlobalPrefs = { viewPrefs: DEFAULT_VIEW_PREFS, countIn: true }
+export const DEFAULT_PREFS: GlobalPrefs = { viewPrefs: DEFAULT_VIEW_PREFS, countIn: true, timbre: DEFAULT_TIMBRE }
 
 export function newTabId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -148,6 +150,7 @@ export function loadPrefs(): GlobalPrefs {
     return {
       viewPrefs: { ...DEFAULT_VIEW_PREFS, ...(parsed.viewPrefs ?? {}) },
       countIn: parsed.countIn !== false,
+      timbre: INSTRUMENTS.some((i) => i.id === parsed.timbre) ? (parsed.timbre as Timbre) : DEFAULT_TIMBRE,
     }
   } catch {
     return DEFAULT_PREFS

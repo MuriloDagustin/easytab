@@ -38,8 +38,16 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
   const [audioError, setAudioError] = useState<string | null>(null)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [shareMessage, setShareMessage] = useState<string | null>(null)
+  const [loadingSamples, setLoadingSamples] = useState(false)
 
-  useEffect(() => () => player.dispose(), [player])
+  useEffect(() => {
+    player.setLoadingListener(setLoadingSamples)
+    return () => player.dispose()
+  }, [player])
+
+  useEffect(() => {
+    player.setTimbre(prefs.timbre)
+  }, [player, prefs.timbre])
 
   const setup: Setup = useMemo(() => ({ tuning: getTuning(saved.tuningId), capo: saved.capo }), [saved.tuningId, saved.capo])
   const event = tab.events[Math.min(currentIndex, tab.events.length - 1)]
@@ -324,12 +332,15 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
           />
         </Card>
 
-        <Card title="Afinação e capotraste">
+        <Card title="Afinação, capotraste e som">
           <SetupControls
             tuningId={saved.tuningId}
             capo={saved.capo}
+            timbre={prefs.timbre}
+            loadingSamples={loadingSamples}
             onTuning={(tuningId) => dispatch({ type: 'setTuning', tuningId })}
             onCapo={(capo) => dispatch({ type: 'setCapo', capo })}
+            onTimbre={(timbre) => dispatch({ type: 'setTimbre', timbre })}
           />
         </Card>
       </div>
