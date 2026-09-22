@@ -13,7 +13,10 @@ vi.mock('./audio/player', async () => {
     TabPlayer: class {
       playEvent = vi.fn().mockResolvedValue(undefined)
       playOpenString = vi.fn().mockResolvedValue(undefined)
-      playSequence = vi.fn().mockResolvedValue(undefined)
+      playSequence = vi.fn(async (o: { order: number[]; onEvent: (i: number) => void; onFinish: () => void }) => {
+        o.onEvent(o.order.at(-1)!)
+        o.onFinish()
+      })
       pause = vi.fn()
       dispose = vi.fn()
       setTimbre = vi.fn()
@@ -154,5 +157,13 @@ describe('fluxo principal', () => {
     await user.type(screen.getByLabelText('Tablatura em texto'), 'isso nao e uma tab')
     await user.click(screen.getByRole('button', { name: 'Processar tablatura' }))
     expect(screen.getByRole('alert')).toHaveTextContent('6 cordas')
+  })
+
+  it('ao terminar a reprodução volta para a primeira nota', async () => {
+    const user = await openExample()
+    await user.click(screen.getAllByRole('button', { name: 'Evento 5' })[0])
+    await user.click(screen.getByRole('button', { name: 'Reproduzir a sequência' }))
+    expect(await screen.findByText(/Passo 1 de 11/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reproduzir a sequência' })).toBeInTheDocument()
   })
 })

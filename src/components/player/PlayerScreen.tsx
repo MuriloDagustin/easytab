@@ -111,7 +111,11 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
         countIn: prefs.countIn,
         onCountIn: (beats) => setCountdown(beats > 0 ? beats : null),
         onEvent: (index) => dispatch({ type: 'setIndex', index }),
-        onFinish: () => dispatch({ type: 'setPlaying', playing: false }),
+        onFinish: () => {
+          dispatch({ type: 'setPlaying', playing: false })
+          // Ao terminar, volta ao começo para o próximo play tocar tudo de novo.
+          dispatch({ type: 'setIndex', index: fallback[0] ?? 0 })
+        },
       })
     } catch {
       setAudioError('Não consegui iniciar o som. Toque na tela uma vez e tente de novo.')
