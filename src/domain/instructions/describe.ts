@@ -56,19 +56,33 @@ function techniqueSentence(note: Note, technique: Technique): string {
     case 'vibrato':
       return 'Mantenha a nota soando e balance o dedo para fazer vibrato.'
     case 'hammer-on':
-      return `Martele o dedo na casa ${target ?? '?'} sem palhetar de novo (hammer-on).`
+      return target === undefined
+        ? 'Martele outro dedo na corda sem palhetar de novo (hammer-on).'
+        : `Martele o dedo na casa ${target} sem palhetar de novo (hammer-on).`
     case 'pull-off':
-      return `Puxe o dedo para soar a casa ${target ?? '?'} sem palhetar de novo (pull-off).`
+      return target === undefined
+        ? 'Puxe o dedo para fora da corda sem palhetar de novo (pull-off).'
+        : `Puxe o dedo para soar a casa ${target} sem palhetar de novo (pull-off).`
     case 'slide-up':
-      return `Deslize o dedo até a casa ${target ?? '?'}, sem tirar a pressão da corda.`
+      return target === undefined
+        ? 'Deslize o dedo para cima e solte a nota no caminho (slide).'
+        : `Deslize o dedo até a casa ${target}, sem tirar a pressão da corda.`
     case 'slide-down':
-      return `Deslize o dedo para trás até a casa ${target ?? '?'}, sem tirar a pressão da corda.`
+      return target === undefined
+        ? 'Deslize o dedo para trás e solte a nota no caminho (slide).'
+        : `Deslize o dedo para trás até a casa ${target}, sem tirar a pressão da corda.`
     case 'bend':
-      return `Empurre a corda para o lado até a nota subir como se fosse a casa ${target ?? '?'} (bend).`
+      return target === undefined
+        ? 'Empurre a corda para o lado até a nota subir (bend).'
+        : `Empurre a corda para o lado até a nota subir como se fosse a casa ${target} (bend).`
     case 'release':
-      return `Solte o bend devagar até a nota voltar para a casa ${target ?? '?'}.`
+      return target === undefined
+        ? 'Solte o bend devagar até a nota voltar ao normal.'
+        : `Solte o bend devagar até a nota voltar para a casa ${target}.`
     case 'tapping':
-      return `Em seguida, bata o dedo da mão direita na casa ${target ?? '?'} (tapping).`
+      return target === undefined
+        ? 'Bata o dedo da mão da palhetada na corda (tapping).'
+        : `Em seguida, bata o dedo da mão direita na casa ${target} (tapping).`
   }
 }
 

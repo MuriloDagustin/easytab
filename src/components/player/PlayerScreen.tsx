@@ -19,6 +19,7 @@ import { PracticePanel } from './PracticePanel'
 import { ReviewPanel } from './ReviewPanel'
 import { RhythmControls } from './RhythmControls'
 import { SetupControls } from './SetupControls'
+import { TabGraphic } from './TabGraphic'
 import { TabView } from './TabView'
 import { usePractice } from './usePractice'
 
@@ -219,19 +220,52 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
         </Alert>
       )}
 
-      <Card title="Tablatura">
-        <TabView
-          tab={tab}
-          currentIndex={currentIndex}
-          hardEvents={saved.hardEvents}
-          stringFilter={stringFilter}
-          onSelect={(index) => {
-            if (playing) stopPlayback()
-            dispatch({ type: 'setIndex', index })
-          }}
-        />
+      <Card
+        title="Tablatura"
+        action={
+          <div role="radiogroup" aria-label="Estilo da tablatura" className="inline-flex rounded-lg border border-border p-0.5">
+            {(['graphic', 'text'] as const).map((style) => (
+              <button
+                key={style}
+                role="radio"
+                aria-checked={prefs.viewPrefs.tabStyle === style}
+                onClick={() => dispatch({ type: 'setTabStyle', style })}
+                className={`min-h-8 rounded-md px-2.5 text-xs transition-colors ${
+                  prefs.viewPrefs.tabStyle === style ? 'bg-accent font-semibold text-accent-ink' : 'text-muted hover:text-text'
+                }`}
+              >
+                {style === 'graphic' ? 'Visual' : 'Texto'}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        {prefs.viewPrefs.tabStyle === 'graphic' ? (
+          <TabGraphic
+            tab={tab}
+            currentIndex={currentIndex}
+            hardEvents={saved.hardEvents}
+            stringFilter={stringFilter}
+            setup={setup}
+            onSelect={(index) => {
+              if (playing) stopPlayback()
+              dispatch({ type: 'setIndex', index })
+            }}
+          />
+        ) : (
+          <TabView
+            tab={tab}
+            currentIndex={currentIndex}
+            hardEvents={saved.hardEvents}
+            stringFilter={stringFilter}
+            onSelect={(index) => {
+              if (playing) stopPlayback()
+              dispatch({ type: 'setIndex', index })
+            }}
+          />
+        )}
         <p className="mt-3 text-xs text-muted">
-          Toque em qualquer nota destacada para ir direto até ela. Notas em vermelho estão marcadas como difíceis.
+          Toque em qualquer nota para ir direto até ela. Notas em vermelho estão marcadas como difíceis.
         </p>
       </Card>
 

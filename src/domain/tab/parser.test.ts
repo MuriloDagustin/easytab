@@ -197,10 +197,64 @@ describe('tablatura colada inteira do Cifra Club', () => {
   it('guarda títulos de seção e observações como rótulo do bloco', () => {
     expect(tab.blocks[0].heading).toBe('1º RIFF')
     expect(tab.blocks[1].heading).toContain('2º RIFF')
-    expect(tab.blocks[1].heading).toContain('daqui')
+    expect(tab.blocks[1].heading).toContain('2 VEZES SEGUIDAS')
+    expect(tab.blocks[1].heading).not.toContain('daqui')
     expect(tab.blocks[2].heading).toBe('OBS: neste ultimo *10 arrastar a nota até o final do braço')
     expect(tab.blocks[3].heading).toBeUndefined()
     expect(tab.blocks[4].heading).toContain('ABAFANDO AS CORDAS')
     expect(tab.blocks[5].heading).toBeUndefined()
+  })
+})
+
+describe('sujeira comum em cifras coladas de sites', () => {
+  it('aceita travessão no lugar de hífen', () => {
+    const tab = parseOk(wrap({ e: '-3\u2013\u2013\u2013\u20133--', B: '---\u2014--' }))
+    expect(tab.events.map((e) => e.notes[0].fret)).toEqual([3, 3])
+    expect(tab.warnings).toEqual([])
+  })
+
+  it('trata reticências e pontos como preenchimento', () => {
+    const tab = parseOk(wrap({ G: '-7h9p7.../12~' }, 20))
+    const frets = tab.events.map((e) => e.notes[0].fret)
+    expect(frets).toEqual([7, 9, 7, 12])
+    expect(tab.events.at(-1)!.notes[0].techniques).toEqual(['vibrato'])
+  })
+
+  it('bend e slide sem casa de destino ficam sem targetFret', () => {
+    const tab = parseOk(wrap({ B: '-12b--', E: '----10\\--' }))
+    const bend = tab.events[0].notes[0]
+    expect(bend).toMatchObject({ fret: 12, techniques: ['bend'] })
+    expect(bend.targetFret).toBeUndefined()
+    const slide = tab.events[1].notes[0]
+    expect(slide).toMatchObject({ fret: 10, techniques: ['slide-down'] })
+    expect(slide.targetFret).toBeUndefined()
+  })
+
+  it('técnica solta antes da nota não vira nota nem quebra a leitura', () => {
+    const tab = parseOk(wrap({ B: '-b17r15--' }))
+    expect(tab.events.map((e) => e.notes[0].fret)).toEqual([17, 15])
+    expect(tab.events[0].notes[0].techniques).toEqual(['release'])
+  })
+
+  it('prioriza marcadores de seção sobre a letra da música no rótulo do bloco', () => {
+    const text = `A5    ( A5  B5 ) C5
+Oh oh            oh
+Sweet child o' mine
+
+[Solo 1] E5  C5  B5  A5
+
+[Tab - Solo 1]
+
+Parte 1 de 6
+${wrap({ e: '-17b19~~--' })}`
+    const tab = parseOk(text)
+    expect(tab.blocks[0].heading).toContain('[Solo 1]')
+    expect(tab.blocks[0].heading).toContain('Parte 1 de 6')
+    expect(tab.blocks[0].heading).not.toContain('Sweet child')
+  })
+
+  it('sem marcadores, usa o texto livre como rótulo', () => {
+    const tab = parseOk(`neste ultimo arrastar a nota\n${wrap({ e: '-10--' })}`)
+    expect(tab.blocks[0].heading).toBe('neste ultimo arrastar a nota')
   })
 })

@@ -27,9 +27,13 @@ O PWA (service worker e manifesto) só funciona no build de produção: rode
   alinhamento vertical, técnicas `~ / \ h p b r t`, corda abafada `x`, palm mute (`PM`) e
   cifras escritas acima da tab. Aceita a música inteira colada de sites como o Cifra Club:
   títulos de seção e observações viram rótulos dos blocos, quebras de linha do site viram
-  blocos seguintes e o rótulo `E` repetido nas duas pontas é tratado pela ordem das linhas.
-- **Três visualizações sincronizadas:** tablatura destacada, instrução em português e braço
-  em SVG com sugestão de dedo quando a posição da mão é clara.
+  blocos seguintes, o rótulo `E` repetido nas duas pontas é tratado pela ordem das linhas,
+  travessões viram hífens e letras da música entre os blocos são ignoradas. Testado com a
+  cifra completa de Sweet Child O' Mine (1102 notas em 95 blocos, sem avisos).
+- **Três visualizações sincronizadas:** tablatura desenhada em SVG no estilo dos sites de
+  partitura (linhas das cordas, números sobre as linhas, barras de compasso, cifras e técnicas),
+  com o texto original disponível num botão; instrução em português; e braço em SVG com
+  sugestão de dedo quando a posição da mão é clara.
 - **Reprodução** com contagem regressiva, velocidade, repetição de trecho e ritmo manual
   (duração curta, normal ou longa e pausas por nota).
 - **Som com gravações reais** de violão de aço, guitarra elétrica e violão de nylon, mais um
@@ -65,6 +69,7 @@ O PWA (service worker e manifesto) só funciona no build de produção: rode
 | `src/share/url.ts` | Codificação da tab na URL |
 | `src/storage/persistence.ts` | Biblioteca e preferências em localStorage |
 | `src/state/appReducer.ts` | Estado da aplicação |
+| `src/components/player/TabGraphic.tsx` | Tablatura desenhada em SVG |
 | `src/components/` | Telas e componentes visuais |
 
 ## Limitações conhecidas

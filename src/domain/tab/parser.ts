@@ -1,7 +1,7 @@
 import type { Note, ParseResult, ParsedTab, StringNumber, TabBlock, TabEvent, Technique } from './types'
 
 // Rótulo opcional, separador opcional, corpo feito de hífens, dígitos, técnicas e barras.
-const TAB_LINE = /^\s*([eEBGDA])?\s*[:]?\s*(\|?)([-0-9~/\\hpbrxXtT|()\s]*)$/
+const TAB_LINE = /^\s*([eEBGDA])?\s*[:]?\s*(\|?)([-0-9~/\\hpbrxXtT|().\s]*)$/
 // Linha de tab: dois hífens seguidos, ou pelo menos três espalhados (ex.: "-12-12-12-|").
 const BODY_HAS_DASHES = /-{2,}|-[^-]*-[^-]*-/
 const CHORD_TOKEN = /^[A-G](#|b)?(m|maj|min|dim|aug|sus|add|M|\+|°|º)?\d{0,2}(\/[A-G](#|b)?)?$/
@@ -90,14 +90,18 @@ function groupLines(lines: string[]): Group[] {
 }
 
 const MAX_HEADING = 160
+const SECTION_MARKER = /^\s*(\[.+\]|Parte \d+ de \d+|\d+[ºª°]? ?[A-ZÀ-Ú][A-ZÀ-Ú ]{2,}|\*.+\*)\s*/
 
-/** Texto livre acima do bloco, sem a linha de cifras/PM, compactado em uma frase. */
+/**
+ * Texto livre acima do bloco, sem a linha de cifras/PM, compactado em uma frase.
+ * Quando há marcadores de seção ("[Solo 1]", "Parte 2 de 6", "2º RIFF"), só eles
+ * entram; assim a letra da música que vem antes não engole o título.
+ */
 function headingFor(group: Group, decoration: Decoration): string | undefined {
   const lines = group.heading.filter((l) => l !== decoration.chordLine && !PALM_MUTE_LINE.test(l))
-  const text = lines
-    .map((l) => l.replace(/\\/g, '').replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .join(' ')
+  const clean = (l: string) => l.replace(/\\/g, '').replace(/\s+/g, ' ').trim()
+  const markers = lines.filter((l) => SECTION_MARKER.test(l)).map(clean)
+  const text = (markers.length ? markers : lines.map(clean)).filter(Boolean).join(' ')
   if (!text) return undefined
   return text.length > MAX_HEADING ? `${text.slice(0, MAX_HEADING - 1)}…` : text
 }
@@ -112,7 +116,8 @@ function orderByLabels(lines: RawLine[]): RawLine[] {
 function normalizeBodies(lines: RawLine[]): { bodies: string[]; length: number } {
   const stripped = lines.map((l) => l.body.replace(/\s+$/, ''))
   const length = Math.max(...stripped.map((b) => b.length))
-  const bodies = stripped.map((b) => b.replace(/\s/g, '-').padEnd(length, '-'))
+  // Espaços e pontos ("..." de "continua") são só preenchimento.
+  const bodies = stripped.map((b) => b.replace(/[\s.]/g, '-').padEnd(length, '-'))
   return { bodies, length }
 }
 
@@ -243,7 +248,8 @@ function parseBlock(
 }
 
 export function parseTab(input: string): ParseResult {
-  const text = input.replace(/\r\n?/g, '\n')
+  // Sites e editores trocam hífen por travessão; em tab eles significam a mesma coisa.
+  const text = input.replace(/\r\n?/g, '\n').replace(/[\u2013\u2014\u2012\u2010]/g, '-')
   if (!text.trim()) {
     return { ok: false, error: 'Cole uma tablatura antes de processar.' }
   }

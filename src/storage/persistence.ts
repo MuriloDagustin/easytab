@@ -9,6 +9,8 @@ export interface ViewPreferences {
   showLegend: boolean
   showFingers: boolean
   showPitches: boolean
+  /** Tablatura desenhada (linhas e números) ou o texto original em fonte mono. */
+  tabStyle: 'graphic' | 'text'
 }
 
 export interface GlobalPrefs {
@@ -51,6 +53,7 @@ export const DEFAULT_VIEW_PREFS: ViewPreferences = {
   showLegend: false,
   showFingers: true,
   showPitches: true,
+  tabStyle: 'graphic',
 }
 
 export const DEFAULT_PREFS: GlobalPrefs = { viewPrefs: DEFAULT_VIEW_PREFS, countIn: true, timbre: DEFAULT_TIMBRE }

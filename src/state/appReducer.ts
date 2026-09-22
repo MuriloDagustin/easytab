@@ -52,6 +52,7 @@ export type AppAction =
   | { type: 'setLoopEnd' }
   | { type: 'setLoopRange'; start: number; end: number }
   | { type: 'setPref'; key: keyof ViewPreferences; value: boolean }
+  | { type: 'setTabStyle'; style: ViewPreferences['tabStyle'] }
   | { type: 'setCountIn'; value: boolean }
   | { type: 'setTimbre'; timbre: Timbre }
   | { type: 'setTuning'; tuningId: string }
@@ -269,6 +270,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return setIndex(updateCurrent(state, { loopStart: action.start, loopEnd: action.end, loopEnabled: true }), action.start)
     case 'setPref':
       return { ...state, prefs: { ...state.prefs, viewPrefs: { ...state.prefs.viewPrefs, [action.key]: action.value } } }
+    case 'setTabStyle':
+      return { ...state, prefs: { ...state.prefs, viewPrefs: { ...state.prefs.viewPrefs, tabStyle: action.style } } }
     case 'setCountIn':
       return { ...state, prefs: { ...state.prefs, countIn: action.value } }
     case 'setTimbre':

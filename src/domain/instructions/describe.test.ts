@@ -71,4 +71,14 @@ describe('describeEvent com símbolos adicionais e afinação', () => {
     expect(d.main).toBe('Toque a 6ª corda (Ré) solta.')
     expect(d.pitches[0]).toContain('D2')
   })
+
+  it('não mostra "casa ?" quando a técnica não tem destino', () => {
+    const tab = parseOk(wrap({ B: '-12b--', E: '----10\\--' }))
+    const bend = describeEvent(tab.events[0]).details.join(' ')
+    const slide = describeEvent(tab.events[1]).details.join(' ')
+    expect(bend).not.toContain('?')
+    expect(bend).toContain('bend')
+    expect(slide).not.toContain('?')
+    expect(slide).toContain('para trás')
+  })
 })
