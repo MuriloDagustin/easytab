@@ -1,3 +1,5 @@
+import type { Jump } from './jumps'
+
 export type StringNumber = 1 | 2 | 3 | 4 | 5 | 6
 
 export type Technique =
@@ -54,12 +56,16 @@ export interface TabBlock {
   sectionRepeat?: number
   /** Quantas vezes só este bloco se repete ("x2" no fim da linha). */
   repeat?: number
+  /** Instruções antes do bloco, como "repete o refrão". */
+  jumpsBefore?: Jump[]
 }
 
 export interface ParsedTab {
   events: TabEvent[]
   blocks: TabBlock[]
   warnings: string[]
+  /** Instruções depois do último bloco, como "volta ao início". */
+  jumpsAtEnd?: Jump[]
 }
 
 export type ParseResult =

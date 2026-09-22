@@ -13,6 +13,7 @@ import {
 import { addPracticeDay, dayKey } from '../domain/streak'
 import type { SpeedTrainer } from '../domain/speedTrainer'
 import type { DrumPattern } from '../audio/beat'
+import { clampBpm, type Meter } from '../domain/meter'
 import { MAX_CAPO, getTuning } from '../domain/music/tuning'
 import type { SharePayload } from '../share/url'
 import type { Timbre } from '../audio/instruments'
@@ -74,6 +75,7 @@ export type AppAction =
   | { type: 'markPracticeDay'; day?: string }
   | { type: 'recordRhythm'; recorded: RecordedRhythm }
   | { type: 'clearRecordedRhythm' }
+  | { type: 'setMeter'; patch: Partial<Meter> }
   | { type: 'setTuning'; tuningId: string }
   | { type: 'setCapo'; capo: number }
   | { type: 'setDuration'; duration: Duration }
@@ -313,6 +315,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return markDay(state, action.day)
     case 'recordRhythm':
       return updateCurrent(state, (t) => ({ rhythm: mergeRecorded(t.rhythm, action.recorded) }))
+    case 'setMeter':
+      return updateCurrent(state, (t) => {
+        const meter = { ...t.meter, ...action.patch }
+        if (meter.bpm !== null) meter.bpm = clampBpm(meter.bpm)
+        return { meter }
+      })
     case 'clearRecordedRhythm':
       return updateCurrent(state, (t) => ({ rhythm: clearRecorded(t.rhythm) }))
     case 'setTuning':

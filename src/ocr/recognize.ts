@@ -155,6 +155,50 @@ export function cleanupTabText(text: string): string {
     .join('\n')
 }
 
+const LABELS = ['e', 'B', 'G', 'D', 'A', 'E']
+const BODY_LOOKALIKES: Record<string, string> = { S: '5', s: '5', Z: '2', z: '2', B: '8', g: '9', q: '9', D: '0' }
+const isTabLine = (line: string) => /-{3,}/.test(line) && !/[a-zA-Z]{3,}/.test(line)
+
+/**
+ * Regras de consistência para blocos de 6 linhas que o OCR leu: rótulos na ordem
+ * padrão quando vieram trocados, letras que parecem dígitos dentro do corpo e linhas
+ * do mesmo comprimento. Não inventa notas: só corrige o que a forma da tab garante.
+ */
+export function repairTabGroups(text: string): string {
+  const lines = text.split('\n')
+  let i = 0
+  while (i < lines.length) {
+    if (!isTabLine(lines[i])) {
+      i++
+      continue
+    }
+    let end = i
+    while (end < lines.length && isTabLine(lines[end])) end++
+    const size = end - i
+    for (let start = i; start + 6 <= end && size % 6 === 0; start += 6) {
+      const group = lines.slice(start, start + 6).map((line, k) => {
+        const m = /^\s*([^|\-\s]{0,2})\s*\|?(.*)$/.exec(line)!
+        const body = m[2].replace(/[SsZzBgqD]/g, (c) => BODY_LOOKALIKES[c])
+        const label = m[1] && LABELS.includes(m[1]) ? m[1] : LABELS[k]
+        return { label, body }
+      })
+      const labels = group.map((g) => g.label)
+      const valid = new Set(labels).size === 6 && labels.every((l) => LABELS.includes(l))
+      const lengths = group.map((g) => g.body.length).sort((a, b) => a - b)
+      const target = lengths[2]
+      group.forEach((g, k) => {
+        let body = g.body
+        const closed = body.endsWith('|')
+        if (closed) body = body.slice(0, -1)
+        if (body.length < target - (closed ? 1 : 0)) body = body.padEnd(target - (closed ? 1 : 0), '-')
+        lines[start + k] = `${valid ? g.label : LABELS[k]}|${body}${closed ? '|' : ''}`
+      })
+    }
+    i = end
+  }
+  return lines.join('\n')
+}
+
 /** Quantas linhas parecem cordas de tablatura (hífens seguidos, com ou sem números). */
 export function countTabLines(text: string): number {
   return text.split('\n').filter((line) => /-{3,}/.test(line) && !/[a-zA-Z]{3,}/.test(line)).length
@@ -203,7 +247,7 @@ export async function runOcr(file: File, onProgress: (p: OcrProgress) => void): 
         const { data } = await worker.recognize(lineSources[i])
         lines.push(data.text.replace(/\n+/g, ' '))
       }
-      text = cleanupTabText(lines.join('\n'))
+      text = repairTabGroups(cleanupTabText(lines.join('\n')))
     }
 
     // A leitura por linha falha em fotos tortas; a imagem inteira serve de comparação.
@@ -211,7 +255,7 @@ export async function runOcr(file: File, onProgress: (p: OcrProgress) => void): 
       await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK })
       onProgress({ percent: 85, message: PHASES.recognizing_text })
       const { data } = await worker.recognize(wholeSource)
-      const whole = cleanupTabText(data.text)
+      const whole = repairTabGroups(cleanupTabText(data.text))
       if (countTabLines(whole) >= countTabLines(text)) text = whole
     }
 

@@ -14,12 +14,17 @@ export interface BeatHits {
   accent: boolean
 }
 
-/** O que soa em cada colcheia de um compasso 4/4 (0 a 7). */
-export function hitsAt(eighth: number, pattern: DrumPattern, metronome: boolean): BeatHits {
-  const e = ((eighth % 8) + 8) % 8
+/** O que soa em cada colcheia de um compasso com `beats` tempos. */
+export function hitsAt(eighth: number, pattern: DrumPattern, metronome: boolean, beats = 4): BeatHits {
+  const perBar = beats * 2
+  const e = ((eighth % perBar) + perBar) % perBar
   const onBeat = e % 2 === 0
-  const kick = pattern === 'rock' ? [0, 4, 5].includes(e) : pattern === 'simple' ? [0, 4].includes(e) : false
-  const snare = pattern !== 'off' && [2, 6].includes(e)
+  const beat = e / 2
+  const strongBeats = beats === 4 ? [0, 2] : [0]
+  let kick = false
+  if (pattern !== 'off' && onBeat && strongBeats.includes(beat)) kick = true
+  if (pattern === 'rock' && beats === 4 && e === 5) kick = true
+  const snare = pattern !== 'off' && onBeat && !strongBeats.includes(beat)
   const hat = pattern === 'rock' || (pattern === 'simple' && onBeat)
   return { kick, snare, hat, click: metronome && onBeat, accent: e === 0 }
 }

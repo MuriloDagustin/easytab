@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanupTabText, countTabLines, findTextBands } from './recognize'
+import { cleanupTabText, countTabLines, findTextBands, repairTabGroups } from './recognize'
 
 describe('OCR: pós-processamento', () => {
   it('corrige confusões comuns só em linhas de tablatura', () => {
@@ -43,5 +43,31 @@ describe('OCR: faixas de texto', () => {
 
   it('conta linhas que parecem cordas de tablatura', () => {
     expect(countTabLines('e|---3---|\nB|-------|\nTítulo\nG|---0---|')).toBe(3)
+  })
+})
+
+describe('OCR: regras de consistência', () => {
+  it('corrige rótulos trocados pela ordem padrão das cordas', () => {
+    const raw = ['c|---3---|', 'B|-------|', '6|--0----|', 'D|-------|', 'A|-------|', 'E|-------|'].join('\n')
+    expect(repairTabGroups(raw).split('\n').map((l) => l[0])).toEqual(['e', 'B', 'G', 'D', 'A', 'E'])
+  })
+
+  it('troca letras parecidas com dígitos só no corpo', () => {
+    const raw = ['e|---S---|', 'B|--1Z---|', 'G|-------|', 'D|---B---|', 'A|-------|', 'E|-------|'].join('\n')
+    const fixed = repairTabGroups(raw).split('\n')
+    expect(fixed[0]).toBe('e|---5---|')
+    expect(fixed[1]).toBe('B|--12---|')
+    expect(fixed[3]).toBe('D|---8---|')
+  })
+
+  it('iguala linhas mais curtas preenchendo com hífens antes da barra final', () => {
+    const raw = ['e|--3-----|', 'B|--------|', 'G|-----|', 'D|--------|', 'A|--------|', 'E|---|'].join('\n')
+    const fixed = repairTabGroups(raw).split('\n')
+    expect(new Set(fixed.map((l) => l.length)).size).toBe(1)
+    expect(fixed[2]).toBe('G|--------|')
+  })
+
+  it('não mexe em texto fora de blocos de 6 linhas', () => {
+    expect(repairTabGroups('Solo em Bb\ne|---S---|')).toBe('Solo em Bb\ne|---S---|')
   })
 })

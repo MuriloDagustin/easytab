@@ -1,3 +1,4 @@
+import { chromaFromSpectrum } from './chroma'
 import { frequencyToMidi } from '../domain/music/tuning'
 
 export interface PitchReading {
@@ -65,14 +66,27 @@ export function detectPitch(buffer: Float32Array, sampleRate: number): PitchRead
   return { frequency, midi, cents: Math.round((midiFloat - midi) * 100), clarity: bestValue }
 }
 
+const SILENCE_RMS = 0.01
+const CHROMA_FFT = 8192
+
 export class MicListener {
   private context: AudioContext | null = null
   private stream: MediaStream | null = null
   private analyser: AnalyserNode | null = null
+  private spectrumAnalyser: AnalyserNode | null = null
   private buffer: Float32Array<ArrayBuffer> | null = null
+  private spectrum: Float32Array<ArrayBuffer> | null = null
   private frame = 0
 
-  async start(onReading: (reading: PitchReading | null) => void): Promise<void> {
+  /**
+   * Lê o microfone a cada quadro. Com `chroma`, também entrega a energia de cada classe
+   * de altura, usada para conferir acordes; o espectro usa uma janela maior para separar
+   * as notas graves.
+   */
+  async start(
+    onReading: (reading: PitchReading | null, chroma: number[] | null) => void,
+    options: { chroma?: boolean } = {},
+  ): Promise<void> {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new MicError('Este navegador não permite usar o microfone.')
     }
@@ -89,11 +103,27 @@ export class MicListener {
     this.analyser.fftSize = 2048
     source.connect(this.analyser)
     this.buffer = new Float32Array(this.analyser.fftSize)
+    if (options.chroma) {
+      this.spectrumAnalyser = this.context.createAnalyser()
+      this.spectrumAnalyser.fftSize = CHROMA_FFT
+      this.spectrumAnalyser.smoothingTimeConstant = 0.5
+      source.connect(this.spectrumAnalyser)
+      this.spectrum = new Float32Array(this.spectrumAnalyser.frequencyBinCount)
+    }
 
     const tick = () => {
       if (!this.analyser || !this.buffer || !this.context) return
       this.analyser.getFloatTimeDomainData(this.buffer)
-      onReading(detectPitch(this.buffer, this.context.sampleRate))
+      let chroma: number[] | null = null
+      if (this.spectrumAnalyser && this.spectrum) {
+        let rms = 0
+        for (let i = 0; i < this.buffer.length; i++) rms += this.buffer[i] * this.buffer[i]
+        if (Math.sqrt(rms / this.buffer.length) >= SILENCE_RMS) {
+          this.spectrumAnalyser.getFloatFrequencyData(this.spectrum)
+          chroma = chromaFromSpectrum(this.spectrum, this.context.sampleRate, CHROMA_FFT)
+        }
+      }
+      onReading(detectPitch(this.buffer, this.context.sampleRate), chroma)
       this.frame = requestAnimationFrame(tick)
     }
     this.frame = requestAnimationFrame(tick)
@@ -106,6 +136,8 @@ export class MicListener {
     this.stream = null
     this.context = null
     this.analyser = null
+    this.spectrumAnalyser = null
     this.buffer = null
+    this.spectrum = null
   }
 }

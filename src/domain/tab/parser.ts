@@ -1,3 +1,4 @@
+import { detectJumps } from './jumps'
 import type { Note, ParseResult, ParsedTab, StringNumber, TabBlock, TabEvent, Technique } from './types'
 
 // Rótulo opcional, separador opcional, corpo feito de hífens, dígitos, técnicas e barras.
@@ -73,7 +74,7 @@ interface Group {
   heading: string[]
 }
 
-function groupLines(lines: string[]): Group[] {
+function groupLines(lines: string[]): { groups: Group[]; trailing: string[] } {
   const groups: Group[] = []
   let current: RawLine[] = []
   let pendingText: string[] = []
@@ -95,8 +96,9 @@ function groupLines(lines: string[]): Group[] {
     if (current.length) flush(line.trim() ? line : null)
     if (line.trim()) pendingText.push(line)
   }
+  const trailing = current.length ? [] : pendingText
   flush(null)
-  return groups
+  return { groups, trailing }
 }
 
 const MAX_HEADING = 160
@@ -268,6 +270,8 @@ function parseBlock(
   if (info.heading) block.heading = info.heading
   if (info.sectionStart) block.sectionStart = true
   if (info.sectionRepeat) block.sectionRepeat = info.sectionRepeat
+  const jumps = detectJumps(group.heading)
+  if (jumps.length) block.jumpsBefore = jumps
   const lineRepeat = Math.max(0, ...ordered.map((l) => l.repeat ?? 0))
   if (lineRepeat) block.repeat = lineRepeat
   return { block, events }
@@ -280,7 +284,7 @@ export function parseTab(input: string): ParseResult {
     return { ok: false, error: 'Cole uma tablatura antes de processar.' }
   }
 
-  const groups = groupLines(text.split('\n'))
+  const { groups, trailing } = groupLines(text.split('\n'))
   const warnings = new Set<string>()
   const blocksRaw: Group[] = []
   for (const group of groups) {
@@ -326,5 +330,7 @@ export function parseTab(input: string): ParseResult {
   }
 
   const tab: ParsedTab = { events, blocks, warnings: [...warnings] }
+  const jumpsAtEnd = detectJumps(trailing)
+  if (jumpsAtEnd.length) tab.jumpsAtEnd = jumpsAtEnd
   return { ok: true, tab }
 }

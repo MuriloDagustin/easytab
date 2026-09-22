@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MicError, MicListener, type PitchReading } from '../../audio/pitch'
+import { chordPresent } from '../../audio/chroma'
 import { fretToMidi, type Setup } from '../../domain/music/tuning'
 import type { TabEvent } from '../../domain/tab/types'
 import type { PracticeStatus } from './PracticePanel'
@@ -50,14 +51,19 @@ export function usePractice({ event, setup, onHit, onMiss, onAdvance }: Options)
     setHitEventId(null)
   }, [])
 
-  const handleReading = useCallback((next: PitchReading | null) => {
+  const handleReading = useCallback((next: PitchReading | null, chroma: number[] | null) => {
     setReading(next)
     if (advancing.current) return
     const { event: current, setup: currentSetup, onHit: hit, onMiss: miss, onAdvance: advance } = latest.current
     const expected = current.notes.filter((n) => !n.muted).map((n) => fretToMidi(n.string, n.fret, currentSetup))
     const now = performance.now()
+    const pitchClasses = new Set(expected.map((m) => m % 12))
 
-    const matches = next !== null && (expected.length === 0 || expected.includes(next.midi))
+    // Acordes: confere se todas as notas esperadas aparecem no espectro, não só a mais forte.
+    const matches =
+      pitchClasses.size >= 2
+        ? chroma !== null && chordPresent(chroma, [...pitchClasses])
+        : next !== null && (expected.length === 0 || expected.includes(next.midi))
     if (matches) {
       wrongSince.current = null
       if (matchSince.current === null) matchSince.current = now
@@ -72,7 +78,8 @@ export function usePractice({ event, setup, onHit, onMiss, onAdvance }: Options)
     }
 
     matchSince.current = null
-    if (next !== null && expected.length > 0) {
+    const sounding = next !== null || chroma !== null
+    if (sounding && expected.length > 0) {
       if (wrongSince.current === null) wrongSince.current = now
       if (!missRecorded.current && now - wrongSince.current >= MISS_MS) {
         missRecorded.current = true
@@ -91,7 +98,7 @@ export function usePractice({ event, setup, onHit, onMiss, onAdvance }: Options)
     const mic = new MicListener()
     listener.current = mic
     try {
-      await mic.start(handleReading)
+      await mic.start(handleReading, { chroma: true })
       setBaseStatus('listening')
     } catch (e) {
       listener.current = null

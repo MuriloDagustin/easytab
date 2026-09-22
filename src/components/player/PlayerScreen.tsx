@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from
 import { TabPlayer } from '../../audio/player'
 import { suggestFingersSequence } from '../../domain/fingering/suggest'
 import { alternatePositions, type Position } from '../../domain/music/positions'
-import { fretToNoteName, getTuning, type Setup } from '../../domain/music/tuning'
+import { chordPitchClasses } from '../../domain/music/chords'
+import { detectKey } from '../../domain/music/keys'
+import { fretToMidi, fretToNoteName, getTuning, tuningLowToHigh, type Setup } from '../../domain/music/tuning'
+import { UNIT_QUARTERS, effectiveBpm, unitMs } from '../../domain/meter'
 import { reviewRange, suggestReview } from '../../domain/review'
-import { baseMsOf, eventUnits, rhythmFromTaps } from '../../domain/rhythm'
+import { eventUnits, noteUnits, rhythmFromTaps } from '../../domain/rhythm'
 import { speedForLoop } from '../../domain/speedTrainer'
 import { currentStreak, dayKey } from '../../domain/streak'
 import { orderFrom, playbackOrder } from '../../domain/tab/playback'
@@ -62,8 +65,8 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
   }, [player, prefs.timbre])
 
   useEffect(() => {
-    player.setBaseMs(baseMsOf(saved.rhythm))
-  }, [player, saved.rhythm])
+    player.setTiming(unitMs(saved.meter, saved.rhythm), UNIT_QUARTERS[saved.meter.unit], saved.meter.beats)
+  }, [player, saved.meter, saved.rhythm])
 
   const setup: Setup = useMemo(() => ({ tuning: getTuning(saved.tuningId), capo: saved.capo }), [saved.tuningId, saved.capo])
   const event = tab.events[Math.min(currentIndex, tab.events.length - 1)]
@@ -104,7 +107,20 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
     return { min, max: Math.max(...all, min + FRET_WINDOW - 1) }
   }, [displayedEvent, prefs.viewPrefs.showAlternates])
 
-  const hasRepeats = tab.blocks.some((b) => b.sectionRepeat || b.repeat)
+  const hasRepeats = tab.blocks.some((b) => b.sectionRepeat || b.repeat || b.jumpsBefore) || Boolean(tab.jumpsAtEnd)
+  const key = useMemo(
+    () =>
+      detectKey(
+        tab.events.flatMap((e) => e.notes.filter((n) => !n.muted).map((n) => fretToMidi(n.string, n.fret, setup))),
+        tab.events.flatMap((e) => (e.chord ? chordPitchClasses(e.chord) : [])),
+      ),
+    [tab.events, setup],
+  )
+  const hasRhythm =
+    Boolean(saved.rhythm.recorded) || Object.keys(saved.rhythm.durations).length > 0 || saved.rhythm.pausesAfter.length > 0
+  const quartersOf = hasRhythm ? (id: number) => noteUnits(saved.rhythm, id) * UNIT_QUARTERS[saved.meter.unit] : null
+  const bpm = effectiveBpm(saved.meter, saved.rhythm)
+  const bpmSource = saved.meter.bpm !== null ? 'manual' : saved.rhythm.recorded ? 'recorded' : 'default'
   const streak = currentStreak(prefs.practiceDays, dayKey(new Date()))
 
   const fingerSequence = useMemo(() => suggestFingersSequence(tab.events), [tab.events])
@@ -385,6 +401,9 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
             stringFilter={stringFilter}
             setup={setup}
             showNotation={prefs.viewPrefs.showNotation}
+            fifths={key.fifths}
+            keyName={key.name}
+            quartersOf={quartersOf}
             onChord={setOpenChord}
             onSelect={(index) => {
               if (playing) stopPlayback()
@@ -520,6 +539,10 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
           onDrums={(pattern) => dispatch({ type: 'setDrums', pattern })}
           onPlayRepeats={(value) => dispatch({ type: 'setPlayRepeats', value })}
           onTrainer={(patch) => dispatch({ type: 'setSpeedTrainer', patch })}
+          meter={saved.meter}
+          bpm={bpm}
+          bpmSource={bpmSource}
+          onMeter={(patch) => dispatch({ type: 'setMeter', patch })}
         />
         <p className="mt-3 text-xs text-muted">
           Atalhos: espaço toca ou pausa, seta direita avança, seta esquerda volta.
@@ -633,7 +656,9 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
         <ChordDialog
           name={openChord}
           leftHanded={prefs.viewPrefs.leftHanded}
-          standardTuning={setup.tuning.id === 'standard'}
+          tuning={tuningLowToHigh(setup.tuning)}
+          tuningName={setup.tuning.name}
+          capo={setup.capo}
           onClose={() => setOpenChord(null)}
         />
       )}

@@ -65,4 +65,49 @@ describe('TabGraphic', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Ver acorde G' }))
     expect(onChord).toHaveBeenCalledWith('G')
   })
+
+  it('desenha a armadura e as figuras de duração quando há ritmo', () => {
+    const { container } = render(
+      <TabGraphic
+        tab={tab()}
+        currentIndex={0}
+        hardEvents={[]}
+        stringFilter={null}
+        setup={DEFAULT_SETUP}
+        showNotation
+        fifths={2}
+        keyName="Ré maior"
+        quartersOf={(id) => (id === 0 ? 2 : 0.5)}
+        onSelect={() => {}}
+      />,
+    )
+    expect(container.querySelectorAll('[data-signature]')).toHaveLength(2)
+    expect(container.querySelector('[data-notation-event="0"]')?.getAttribute('data-value')).toBe('mínima')
+    expect(container.querySelector('[data-notation-event="1"]')?.getAttribute('data-value')).toBe('colcheia')
+    expect(screen.getByText(/Tonalidade provável: Ré maior/)).toBeInTheDocument()
+  })
+
+  it('sem ritmo anotado mostra só as alturas, sem hastes', () => {
+    const { container } = render(
+      <TabGraphic tab={tab()} currentIndex={0} hardEvents={[]} stringFilter={null} setup={DEFAULT_SETUP} showNotation onSelect={() => {}} />,
+    )
+    expect(container.querySelectorAll('.stem')).toHaveLength(0)
+    expect(screen.getByText(/Sem ritmo anotado/)).toBeInTheDocument()
+  })
+
+  it('mostra as instruções de salto', () => {
+    const b = (n: string) => ['e', 'B', 'G', 'D', 'A', 'E'].map((l) => `${l}|${l === 'B' ? n : '-----'}|`).join('\n')
+    render(
+      <TabGraphic
+        tab={tab(`[Refrão]\n${b('--2--')}\n\nRepete o refrão\n\n[Solo]\n${b('--4--')}\n\nVolta ao início`)}
+        currentIndex={0}
+        hardEvents={[]}
+        stringFilter={null}
+        setup={DEFAULT_SETUP}
+        onSelect={() => {}}
+      />,
+    )
+    expect(screen.getByText('antes: refrão')).toBeInTheDocument()
+    expect(screen.getByText('No fim: volta para o início')).toBeInTheDocument()
+  })
 })

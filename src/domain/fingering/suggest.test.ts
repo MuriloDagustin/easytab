@@ -59,4 +59,13 @@ describe('suggestFingersSequence', () => {
     const seq = suggestFingersSequence(events(wrap({ A: '--x--' })))
     expect(seq[0]).toBeNull()
   })
+
+  it('planeja trechos maiores que uma posição, trocando a mão onde precisa', async () => {
+    const { suggestFingersSequence } = await import('./suggest')
+    const seq = suggestFingersSequence(events(wrap({ B: '--5--7--8--10--8--7--5--' }, 30)))
+    expect(seq[0]?.get('2:5')).toBe(1)
+    expect(seq[2]?.get('2:8')).toBe(4)
+    expect(seq[3]?.get('2:10')).toBe(4)
+    expect(seq[5]?.get('2:7')).toBe(1)
+  })
 })

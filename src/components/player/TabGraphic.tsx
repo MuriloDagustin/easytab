@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react'
-import { staffNote } from '../../domain/music/notation'
+import { FLAT_SIGNATURE_STEPS, SHARP_SIGNATURE_STEPS } from '../../domain/music/keys'
+import { noteValue, staffNote } from '../../domain/music/notation'
 import { fretToMidi, stringInfo, type Setup } from '../../domain/music/tuning'
 import type { ParsedTab, StringNumber, TabBlock, TabEvent } from '../../domain/tab/types'
 
@@ -10,13 +11,18 @@ interface Props {
   stringFilter: StringNumber | null
   setup: Setup
   showNotation?: boolean
+  /** Armadura da tonalidade detectada, para a partitura. */
+  fifths?: number
+  keyName?: string
+  /** Duração do evento em semínimas, quando há ritmo anotado. */
+  quartersOf?: ((eventId: number) => number) | null
   onSelect: (index: number) => void
   onChord?: (name: string) => void
 }
 
 const COL = 11
 const GAP = 15
-const LEFT = 34
+const BASE_LEFT = 34
 const TOP = 12
 const BOTTOM = 10
 const HALF = 4
@@ -80,19 +86,36 @@ interface BlockProps {
   stringFilter: StringNumber | null
   setup: Setup
   showNotation: boolean
+  fifths: number
+  quartersOf: ((eventId: number) => number) | null
   onSelect: (index: number) => void
   onChord?: (name: string) => void
   activeRef: RefObject<SVGGElement | null>
 }
 
-function BlockGraphic({ block, events, currentIndex, hardEvents, stringFilter, setup, showNotation, onSelect, onChord, activeRef }: BlockProps) {
+function BlockGraphic({
+  block,
+  events,
+  currentIndex,
+  hardEvents,
+  stringFilter,
+  setup,
+  showNotation,
+  fifths,
+  quartersOf,
+  onSelect,
+  onChord,
+  activeRef,
+}: BlockProps) {
+  const signatureWidth = showNotation ? 12 + Math.abs(fifths) * 6 : 0
+  const LEFT = BASE_LEFT + signatureWidth
   const x = (column: number) => LEFT + column * COL
   const width = LEFT + block.bodyLength * COL + 12
 
   const staff = showNotation
     ? events.map((e) => ({
         event: e,
-        notes: e.notes.filter((n) => !n.muted).map((n) => ({ string: n.string, ...staffNote(fretToMidi(n.string, n.fret, setup)) })),
+        notes: e.notes.filter((n) => !n.muted).map((n) => ({ string: n.string, ...staffNote(fretToMidi(n.string, n.fret, setup), fifths) })),
       }))
     : []
   const steps = staff.flatMap((s) => s.notes.map((n) => n.step))
@@ -122,7 +145,7 @@ function BlockGraphic({ block, events, currentIndex, hardEvents, stringFilter, s
             <line key={step} className="staff-line" x1={LEFT - 26} x2={width - 12} y1={stepY(step)} y2={stepY(step)} stroke="#6b7180" strokeWidth="0.9" />
           ))}
           <text
-            x={LEFT - 24}
+            x={BASE_LEFT - 24}
             y={stepY(0) + 6}
             className="fill-[#a3a9b8]"
             style={{ fontSize: 38, fontFamily: '"Noto Music", "Bravura", "Segoe UI Symbol", "Apple Symbols", serif' }}
@@ -130,9 +153,14 @@ function BlockGraphic({ block, events, currentIndex, hardEvents, stringFilter, s
           >
             𝄞
           </text>
-          <text x={LEFT - 15} y={stepY(-4)} textAnchor="middle" className="fill-[#a3a9b8] text-[8px]" aria-hidden>
+          <text x={BASE_LEFT - 15} y={stepY(-4)} textAnchor="middle" className="fill-[#a3a9b8] text-[8px]" aria-hidden>
             8
           </text>
+          {(fifths > 0 ? SHARP_SIGNATURE_STEPS.slice(0, fifths) : FLAT_SIGNATURE_STEPS.slice(0, -fifths)).map((step, i) => (
+            <text key={i} x={BASE_LEFT - 2 + i * 6} y={stepY(step) + 4} className="fill-[#a3a9b8] text-[12px]" data-signature aria-hidden>
+              {fifths > 0 ? '♯' : '♭'}
+            </text>
+          ))}
           {staff.map(({ event, notes }) => {
             if (!notes.length) return null
             const cx = x(event.column) + (event.width * COL) / 2
@@ -141,30 +169,54 @@ function BlockGraphic({ block, events, currentIndex, hardEvents, stringFilter, s
             const highest = Math.max(...notes.map((n) => n.step))
             const lowest = Math.min(...notes.map((n) => n.step))
             const stemUp = (highest + lowest) / 2 < 4
+            const value = quartersOf ? noteValue(quartersOf(event.id)) : null
+            const hollow = value !== null && value.head !== 'black'
+            const stemX = stemUp ? cx + 4.2 : cx - 4.2
+            const stemEnd = stemUp ? stepY(highest) - 24 : stepY(lowest) + 24
             return (
-              <g key={event.id} data-notation-event={event.id}>
+              <g key={event.id} data-notation-event={event.id} data-value={value?.name}>
                 {notes.flatMap((n) => n.ledgers).filter((v, i, a) => a.indexOf(v) === i).map((l) => (
                   <line key={`l${l}`} className="staff-line" x1={cx - 8} x2={cx + 8} y1={stepY(l)} y2={stepY(l)} stroke="#6b7180" strokeWidth="0.9" />
                 ))}
                 {notes.map((n) => (
                   <g key={n.string}>
-                    <ellipse className="notehead" cx={cx} cy={stepY(n.step)} rx="4.6" ry="3.4" transform={`rotate(-20 ${cx} ${stepY(n.step)})`} fill={color} />
-                    {n.sharp && (
+                    <ellipse
+                      className="notehead"
+                      cx={cx}
+                      cy={stepY(n.step)}
+                      rx="4.6"
+                      ry="3.4"
+                      transform={`rotate(-20 ${cx} ${stepY(n.step)})`}
+                      fill={hollow ? 'none' : color}
+                      stroke={color}
+                      strokeWidth={hollow ? 1.4 : 0}
+                    />
+                    {value?.dotted && <circle cx={cx + 8} cy={stepY(n.step) - (n.step % 2 === 0 ? 2 : 0)} r="1.3" fill={color} />}
+                    {n.accidental && (
                       <text x={cx - 11} y={stepY(n.step) + 4.5} textAnchor="middle" className="text-[13px] font-bold" fill={color}>
-                        ♯
+                        {n.accidental === 'sharp' ? '♯' : n.accidental === 'flat' ? '♭' : '♮'}
                       </text>
                     )}
                   </g>
                 ))}
-                <line
-                  className="stem"
-                  x1={stemUp ? cx + 4.2 : cx - 4.2}
-                  x2={stemUp ? cx + 4.2 : cx - 4.2}
-                  y1={stemUp ? stepY(lowest) : stepY(highest)}
-                  y2={stemUp ? stepY(highest) - 24 : stepY(lowest) + 24}
-                  stroke={color}
-                  strokeWidth="1"
-                />
+                {value?.stem && (
+                  <line className="stem" x1={stemX} x2={stemX} y1={stemUp ? stepY(lowest) : stepY(highest)} y2={stemEnd} stroke={color} strokeWidth="1" />
+                )}
+                {value &&
+                  Array.from({ length: value.flags }, (_, f) => {
+                    const y0 = stemEnd + (stemUp ? f * 5 : -f * 5)
+                    const dir = stemUp ? 1 : -1
+                    return (
+                      <path
+                        key={f}
+                        className="stem"
+                        d={`M ${stemX} ${y0} q 7 ${4 * dir} 5 ${11 * dir}`}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth="1.3"
+                      />
+                    )
+                  })}
               </g>
             )
           })}
@@ -274,12 +326,25 @@ function BlockGraphic({ block, events, currentIndex, hardEvents, stringFilter, s
 
 function repeatLabel(block: TabBlock): string | null {
   const parts: string[] = []
+  for (const jump of block.jumpsBefore ?? []) parts.push(`antes: ${jump.label}${jump.times > 1 ? ` ×${jump.times}` : ''}`)
   if (block.sectionRepeat) parts.push(`seção ×${block.sectionRepeat}`)
   if (block.repeat) parts.push(`bloco ×${block.repeat}`)
   return parts.length ? parts.join(' · ') : null
 }
 
-export function TabGraphic({ tab, currentIndex, hardEvents, stringFilter, setup, showNotation = false, onSelect, onChord }: Props) {
+export function TabGraphic({
+  tab,
+  currentIndex,
+  hardEvents,
+  stringFilter,
+  setup,
+  showNotation = false,
+  fifths = 0,
+  keyName,
+  quartersOf = null,
+  onSelect,
+  onChord,
+}: Props) {
   const activeRef = useRef<SVGGElement>(null)
 
   useEffect(() => {
@@ -288,6 +353,12 @@ export function TabGraphic({ tab, currentIndex, hardEvents, stringFilter, setup,
 
   return (
     <div className="max-h-[440px] overflow-auto pr-1 print:max-h-none print:overflow-visible">
+      {showNotation && (
+        <p className="mb-2 text-xs text-muted" data-notation-info>
+          {keyName && `Tonalidade provável: ${keyName}. `}
+          {quartersOf ? 'Figuras de duração vêm do ritmo anotado.' : 'Sem ritmo anotado: a partitura mostra só as alturas.'}
+        </p>
+      )}
       <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
         {tab.blocks.map((block) => {
           const repeat = repeatLabel(block)
@@ -316,6 +387,8 @@ export function TabGraphic({ tab, currentIndex, hardEvents, stringFilter, setup,
                   stringFilter={stringFilter}
                   setup={setup}
                   showNotation={showNotation}
+                  fifths={fifths}
+                  quartersOf={quartersOf}
                   onSelect={onSelect}
                   onChord={onChord}
                   activeRef={activeRef}
@@ -325,6 +398,11 @@ export function TabGraphic({ tab, currentIndex, hardEvents, stringFilter, setup,
           )
         })}
       </div>
+      {tab.jumpsAtEnd?.length ? (
+        <p className="mt-3 text-xs font-semibold text-accent-strong" data-repeat>
+          No fim: {tab.jumpsAtEnd.map((j) => `volta para ${j.label}${j.times > 1 ? ` ×${j.times}` : ''}`).join(', ')}
+        </p>
+      ) : null}
     </div>
   )
 }

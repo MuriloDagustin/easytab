@@ -40,7 +40,7 @@ describe('repetições indicadas na tab', () => {
   it('observações soltas não quebram a seção', () => {
     const text = `[Riff] 2x\n${block('--1--')}\n\nOBS: arrastar a nota\n${block('--2--')}`
     const tab = parseOk(text)
-    expect(sectionsOf(tab)).toEqual([{ blocks: [0, 1], repeat: 2 }])
+    expect(sectionsOf(tab)).toMatchObject([{ blocks: [0, 1], repeat: 2 }])
   })
 
   it('não confunde "Parte 2 de 12" com repetição', () => {
@@ -50,5 +50,19 @@ describe('repetições indicadas na tab', () => {
   it('começa a partir do evento atual', () => {
     expect(orderFrom([0, 1, 2, 1, 2, 3], 2)).toEqual([2, 1, 2, 3])
     expect(orderFrom([0, 2, 4], 3)).toEqual([4])
+  })
+
+  it('toca a seção citada em "repete o refrão" e no "volta ao início" do fim', () => {
+    const text = `[Intro]\n${block('--1--')}\n\n[Refrão]\n${block('--2--')}\n\n[Verso]\n${block('--3--')}\n\nRepete o refrão\n\n[Solo]\n${block('--4--')}\n\nVolta ao início`
+    const tab = parseOk(text)
+    const frets = (ids: number[]) => ids.map((id) => tab.events[id].notes[0].fret)
+    expect(frets(playbackOrder(tab, () => true, true))).toEqual([1, 2, 3, 2, 4, 1, 2, 3, 4])
+    expect(frets(playbackOrder(tab, () => true, false))).toEqual([1, 2, 3, 4])
+  })
+
+  it('não duplica quando o autor escreve a instrução e cola a própria seção embaixo', () => {
+    const text = `[Refrão]\n${block('--2--')}\n\nRepete o refrão\n[Refrão]\n${block('--2--')}`
+    const tab = parseOk(text)
+    expect(playbackOrder(tab, () => true, true)).toHaveLength(2)
   })
 })

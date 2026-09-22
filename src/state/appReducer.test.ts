@@ -140,4 +140,11 @@ describe('appReducer', () => {
     state = appReducer(state, { type: 'setSpeedTrainer', patch: { enabled: true, target: 1.25 } })
     expect(state.prefs.speedTrainer).toMatchObject({ enabled: true, start: 0.5, target: 1.25 })
   })
+
+  it('guarda andamento e compasso por tablatura, limitando o andamento', () => {
+    let state = appReducer(processed(), { type: 'setMeter', patch: { bpm: 500, beats: 3 } })
+    expect(currentSaved(state)?.meter).toEqual({ bpm: 260, beats: 3, unit: 'quarter' })
+    state = appReducer(state, { type: 'setMeter', patch: { bpm: null } })
+    expect(currentSaved(state)?.meter.bpm).toBeNull()
+  })
 })

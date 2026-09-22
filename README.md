@@ -50,15 +50,19 @@ O PWA (service worker e manifesto) só funciona no build de produção: rode
   "Revisão", com um botão que monta um loop curto para praticar.
 - **Compartilhar por link.** A tab, a afinação e o capo vão codificados na URL.
 - **Treino de velocidade.** Repete o trecho e sobe a velocidade a cada volta até um alvo.
-- **Metrônomo e bateria.** Clique contínuo e duas batidas simples de bateria durante a reprodução.
+- **Metrônomo e bateria** no andamento e no compasso reais: BPM digitado ou marcado no tempo,
+  compasso 2/4, 3/4 ou 4/4 e a figura que vale cada nota normal.
+- **Bend, slide e ligados contínuos.** Cada corda tem uma voz: o bend sobe de altura sem
+  cortar, o slide passa casa por casa e hammer-on e pull-off não palhetam de novo.
 - **Ritmo gravado tocando junto.** Com a música original tocando, o aluno aperta espaço a cada
   nota; o app mede os intervalos e usa esse andamento e essas durações na reprodução.
-- **Repetições da tab.** "2X", "2 vezes" no título da seção e "x2" no fim das linhas são tocados
-  de verdade, com opção de desligar.
+- **Repetições e saltos da tab.** "2X", "2 vezes" e "x2" repetem de verdade; "repete o refrão"
+  e "volta ao início" tocam a seção citada. Dá para desligar.
 - **Afinador cromático** pelo microfone, com ponteiro e indicação de apertar ou soltar a tarraxa.
-- **Diagrama de acorde** ao tocar numa cifra: forma aberta quando existe, senão pestana na
-  posição mais baixa, com a digitação.
-- **Partitura acima da tab**, opcional, na clave de sol de guitarra.
+- **Diagrama de acorde** ao tocar numa cifra, em qualquer afinação, com extensões (7(9),
+  add9, m7b5…) e baixo invertido, e a digitação.
+- **Partitura acima da tab**, opcional, com tonalidade detectada, armadura e figuras de
+  duração quando o ritmo está anotado.
 - **Modo canhoto** no braço e nos diagramas, e **outras posições da mesma nota** no braço.
 - **Sequência de dias e pontuação** da prática com microfone, com estrelas por aproveitamento.
 - **Impressão ou PDF** da tablatura, em preto no branco.
@@ -87,25 +91,22 @@ O PWA (service worker e manifesto) só funciona no build de produção: rode
 
 ## Limitações conhecidas
 
-- **Ritmo.** Tablatura em texto não carrega duração. Por padrão todos os eventos duram o
-  mesmo; você pode ajustar durações e pausas manualmente, mas o app não adivinha o ritmo.
-- **OCR.** A leitura de imagem melhora ao recortar linha por linha, mas ainda confunde
-  dígitos parecidos (3 e 8, 0 e 6) e perde barras. O texto sempre passa pelo editor.
-  Na primeira execução o Tesseract baixa o modelo da internet.
-- **Detecção de altura.** Funciona bem com uma nota por vez em ambiente silencioso. Em
-  acordes, basta uma das notas esperadas ser detectada. Distorção e ruído confundem.
-- **Som.** As gravações têm uma nota a cada 2 ou 3 semitons; as outras são transpostas a
-  partir da mais próxima, o que soa natural nesse intervalo. Não há variação de timbre por
-  corda (a mesma nota na 2ª ou na 3ª corda soa igual). Na primeira vez, cada instrumento
-  precisa de internet para baixar as amostras; sem elas o app cai no sintetizador.
-- **Slide e bend no áudio.** Indicados por um segundo toque mais suave na nota de destino.
-  Hammer-on, pull-off e tapping saem com ataque mais fraco, mas sem ligadura real.
-- **Sugestão de dedo.** Só aparece quando o trecho cabe em uma posição de 4 casas.
-  Fora disso o app mostra apenas a posição.
-- **Cifras.** Reconhecidas quando escritas sozinhas na linha imediatamente acima do bloco.
-  Os diagramas valem para afinação padrão e simplificam extensões como 7(9) e baixo invertido.
-- **Partitura.** Mostra as alturas, sem duração: todas as notas aparecem como semínimas e sem
-  armadura de clave, sempre com sustenidos.
-- **Repetições.** Uma seção vai do título até o próximo título de seção; observações soltas não
-  quebram a seção. Instruções como "volta ao refrão" não são interpretadas.
-- **Metrônomo e bateria.** Seguem a unidade de tempo do app, não um compasso real da música.
+- **Ritmo.** Tablatura em texto não carrega duração, e o app não adivinha. Sem anotação, todas
+  as notas duram o mesmo e a partitura mostra só as alturas. Marcar o ritmo tocando junto com
+  a música, ou escolher durações à mão, resolve para aquela tab.
+- **OCR.** Recorte por linha e regras de consistência (rótulos, letras parecidas com dígitos,
+  comprimento das linhas) reduzem os erros, mas dígitos parecidos como 3 e 8 ainda escapam.
+  O texto sempre passa pelo editor. Na primeira vez, o modelo de OCR é baixado da internet.
+- **Detecção pelo microfone.** Precisa de ambiente silencioso. Acordes são conferidos pelo
+  perfil de cada nota no espectro, sem distinguir a oitava; distorção pesada atrapalha.
+- **Som.** As amostras são as mesmas para todas as cordas; um filtro por corda e casa deixa
+  a corda grossa mais escura, mas não substitui gravações feitas corda por corda.
+- **Sugestão de dedo.** O planejamento cobre trechos inteiros, mas só mostra dedos em acordes
+  e em trechos na mesma posição da mão que percorrem pelo menos três casas.
+- **Saltos da tab.** "Repete o refrão", "volta pra intro", "volta ao início" e "D.C." são
+  entendidos. Instruções escritas de outro jeito ficam só como texto.
+- **Partitura.** Tonalidade detectada automaticamente; acidentes aparecem em toda nota que
+  foge da armadura, sem valer pelo compasso inteiro, e não há ligaduras de valor nem pausas.
+- **Diagramas.** Na afinação padrão, usam as formas clássicas; nas outras, a forma é
+  calculada e pode não ser a mais comum entre guitarristas.
+- **Importar pelo link do Cifra Club.** Exigiria um servidor, e os termos de uso do site pesam.

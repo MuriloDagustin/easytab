@@ -18,6 +18,11 @@ export const TUNINGS: Tuning[] = [
 ]
 
 export const STANDARD_TUNING = TUNINGS[0]
+
+/** MIDI das cordas soltas da 6ª para a 1ª, a ordem usada nos diagramas de acorde. */
+export function tuningLowToHigh(tuning: Tuning): number[] {
+  return [6, 5, 4, 3, 2, 1].map((s) => tuning.midi[s as StringNumber])
+}
 export const MAX_CAPO = 9
 
 export function getTuning(id: string): Tuning {

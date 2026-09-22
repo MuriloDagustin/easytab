@@ -17,9 +17,10 @@ describe('ChordDiagram', () => {
     expect(screen.getByText('4ª')).toBeInTheDocument()
   })
 
-  it('avisa quando simplifica a cifra', () => {
-    render(<ChordDiagram name="A7(9)" />)
-    expect(screen.getByText(/Forma simplificada/)).toBeInTheDocument()
+  it('monta a forma na afinação escolhida', () => {
+    const { container } = render(<ChordDiagram name="D5" tuning={[38, 45, 50, 55, 59, 64]} />)
+    expect(container.querySelectorAll('[data-open]')).toHaveLength(3)
+    expect(container.querySelectorAll('[data-dot]')).toHaveLength(0)
   })
 
   it('espelha para canhoto', () => {

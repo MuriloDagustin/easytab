@@ -2,6 +2,7 @@ import { EMPTY_RHYTHM, type RhythmAnnotations } from '../domain/rhythm'
 import { DEFAULT_TIMBRE, INSTRUMENTS, type Timbre } from '../audio/instruments'
 import { DRUM_PATTERNS, type DrumPattern } from '../audio/beat'
 import { DEFAULT_SPEED_TRAINER, type SpeedTrainer } from '../domain/speedTrainer'
+import { DEFAULT_METER, clampBpm, type Meter } from '../domain/meter'
 
 export const LIBRARY_KEY = 'tabfacil:library:v2'
 export const PREFS_KEY = 'tabfacil:prefs:v2'
@@ -50,6 +51,7 @@ export interface SavedTab {
   tuningId: string
   capo: number
   rhythm: RhythmAnnotations
+  meter: Meter
   hardEvents: number[]
   practice: Record<number, PracticeRecord>
   lastPracticedAt?: string
@@ -101,6 +103,7 @@ export function createSavedTab(text: string, name: string, overrides: Partial<Sa
     tuningId: 'standard',
     capo: 0,
     rhythm: EMPTY_RHYTHM,
+    meter: DEFAULT_METER,
     hardEvents: [],
     practice: {},
     ...overrides,
@@ -120,6 +123,11 @@ function sanitizeTab(raw: Partial<SavedTab>): SavedTab | null {
       ...(raw.rhythm?.recorded && typeof raw.rhythm.recorded.baseMs === 'number'
         ? { recorded: { baseMs: raw.rhythm.recorded.baseMs, units: raw.rhythm.recorded.units ?? {} } }
         : {}),
+    },
+    meter: {
+      bpm: typeof raw.meter?.bpm === 'number' ? clampBpm(raw.meter.bpm) : null,
+      beats: raw.meter?.beats === 2 || raw.meter?.beats === 3 ? raw.meter.beats : 4,
+      unit: raw.meter?.unit === 'eighth' || raw.meter?.unit === 'sixteenth' ? raw.meter.unit : 'quarter',
     },
     hardEvents: Array.isArray(raw.hardEvents) ? raw.hardEvents : [],
     practice: raw.practice ?? {},

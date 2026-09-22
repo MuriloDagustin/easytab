@@ -5,10 +5,12 @@ import { Button } from '../ui/Button'
 interface DiagramProps {
   name: string
   leftHanded?: boolean
+  /** Cordas soltas da 6ª para a 1ª, em MIDI. */
+  tuning?: number[]
 }
 
-export function ChordDiagram({ name, leftHanded = false }: DiagramProps) {
-  const shape = chordShape(name)
+export function ChordDiagram({ name, leftHanded = false, tuning }: DiagramProps) {
+  const shape = chordShape(name, tuning)
   if (!shape) return <p className="text-sm text-muted">Não conheço uma forma para “{name}”.</p>
 
   const gap = 26
@@ -77,7 +79,7 @@ export function ChordDiagram({ name, leftHanded = false }: DiagramProps) {
       </svg>
       {shape.simplified && (
         <figcaption className="max-w-56 text-center text-xs text-muted">
-          Forma simplificada: extensões e baixo invertido ficam de fora.
+          Forma simplificada: algumas extensões da cifra ficaram de fora para caber na mão.
         </figcaption>
       )}
     </figure>
@@ -87,11 +89,13 @@ export function ChordDiagram({ name, leftHanded = false }: DiagramProps) {
 interface DialogProps {
   name: string
   leftHanded: boolean
-  standardTuning: boolean
+  tuning: number[]
+  tuningName: string
+  capo: number
   onClose: () => void
 }
 
-export function ChordDialog({ name, leftHanded, standardTuning, onClose }: DialogProps) {
+export function ChordDialog({ name, leftHanded, tuning, tuningName, capo, onClose }: DialogProps) {
   const closeRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -113,10 +117,11 @@ export function ChordDialog({ name, leftHanded, standardTuning, onClose }: Dialo
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-2xl font-bold">{name}</h2>
-        <ChordDiagram name={name} leftHanded={leftHanded} />
+        <ChordDiagram name={name} leftHanded={leftHanded} tuning={tuning} />
         <p className="text-center text-xs text-muted">
           Números nas bolinhas são os dedos: 1 indicador, 2 médio, 3 anelar, 4 mínimo. × = não toque a corda.
-          {!standardTuning && ' O diagrama vale para a afinação padrão.'}
+          {` Afinação: ${tuningName}.`}
+          {capo > 0 && ` Casas contadas a partir do capotraste na casa ${capo}.`}
         </p>
         <Button ref={closeRef} onClick={onClose} className="w-full">
           Fechar

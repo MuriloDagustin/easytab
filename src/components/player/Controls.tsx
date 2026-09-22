@@ -1,4 +1,6 @@
 import { DRUM_PATTERNS, type DrumPattern } from '../../audio/beat'
+import { useRef, useState } from 'react'
+import { MAX_BPM, MIN_BPM, UNIT_LABELS, bpmFromTaps, type Meter, type NoteUnit } from '../../domain/meter'
 import type { SpeedTrainer } from '../../domain/speedTrainer'
 import type { StringNumber } from '../../domain/tab/types'
 import { Button } from '../ui/Button'
@@ -26,6 +28,99 @@ interface Props {
   onDrums: (pattern: DrumPattern) => void
   onPlayRepeats: (value: boolean) => void
   onTrainer: (patch: Partial<SpeedTrainer>) => void
+  meter: Meter
+  bpm: number
+  bpmSource: 'manual' | 'recorded' | 'default'
+  onMeter: (patch: Partial<Meter>) => void
+}
+
+const BPM_SOURCE: Record<Props['bpmSource'], string> = {
+  manual: 'definido por você',
+  recorded: 'do ritmo gravado',
+  default: 'padrão do app',
+}
+
+function MeterControls({ meter, bpm, bpmSource, onMeter }: Pick<Props, 'meter' | 'bpm' | 'bpmSource' | 'onMeter'>) {
+  const taps = useRef<number[]>([])
+  const [tapCount, setTapCount] = useState(0)
+  const [draft, setDraft] = useState<string | null>(null)
+
+  function tap() {
+    const now = performance.now()
+    if (taps.current.length && now - taps.current.at(-1)! > 2500) taps.current = []
+    taps.current = [...taps.current, now].slice(-8)
+    setTapCount(taps.current.length)
+    const measured = bpmFromTaps(taps.current)
+    if (measured) onMeter({ bpm: measured })
+  }
+
+  return (
+    <fieldset className="rounded-xl border border-border p-3">
+      <legend className="px-1 text-xs tracking-wide text-muted uppercase">Andamento e compasso</legend>
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <label className="flex items-center gap-2 text-muted">
+          Andamento
+          <input
+            type="number"
+            inputMode="numeric"
+            min={MIN_BPM}
+            max={MAX_BPM}
+            value={draft ?? String(bpm)}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => {
+              if (draft !== null && Number(draft) > 0) onMeter({ bpm: Number(draft) })
+              setDraft(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
+            className="min-h-11 w-20 rounded-xl border border-border bg-surface-2 px-2 py-2 text-sm text-text"
+          />
+          BPM
+        </label>
+        <Button onClick={tap} aria-label="Marcar andamento tocando no tempo">
+          👆 Marcar no tempo{tapCount > 0 && tapCount < 3 ? ` (${tapCount})` : ''}
+        </Button>
+        {meter.bpm !== null && (
+          <Button variant="ghost" onClick={() => onMeter({ bpm: null })}>
+            Automático
+          </Button>
+        )}
+        <label className="flex items-center gap-2 text-muted">
+          Compasso
+          <select
+            value={meter.beats}
+            onChange={(e) => onMeter({ beats: Number(e.target.value) as Meter['beats'] })}
+            className="min-h-11 rounded-xl border border-border bg-surface-2 px-2 py-2 text-sm text-text"
+          >
+            {[2, 3, 4].map((b) => (
+              <option key={b} value={b}>
+                {b}/4
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-muted">
+          Nota normal vale
+          <select
+            value={meter.unit}
+            onChange={(e) => onMeter({ unit: e.target.value as NoteUnit })}
+            className="min-h-11 rounded-xl border border-border bg-surface-2 px-2 py-2 text-sm text-text"
+          >
+            {(Object.keys(UNIT_LABELS) as NoteUnit[]).map((u) => (
+              <option key={u} value={u}>
+                {UNIT_LABELS[u]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        {bpm} BPM, {BPM_SOURCE[bpmSource]}. O metrônomo e a bateria seguem esse andamento e o compasso, começando
+        na primeira nota tocada. Toque "Marcar no tempo" pelo menos 3 vezes junto com a música.
+      </p>
+    </fieldset>
+  )
 }
 
 const TRAINER_SPEEDS = [0.25, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5]
@@ -82,6 +177,8 @@ export function Controls(props: Props) {
           </span>
         )}
       </div>
+
+      <MeterControls meter={props.meter} bpm={props.bpm} bpmSource={props.bpmSource} onMeter={props.onMeter} />
 
       <fieldset className="rounded-xl border border-border p-3">
         <legend className="px-1 text-xs tracking-wide text-muted uppercase">Treino de velocidade</legend>
