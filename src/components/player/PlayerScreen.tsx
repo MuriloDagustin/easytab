@@ -21,6 +21,7 @@ import { RhythmControls } from './RhythmControls'
 import { SetupControls } from './SetupControls'
 import { TabGraphic } from './TabGraphic'
 import { TabView } from './TabView'
+import { TransportBar } from './TransportBar'
 import { usePractice } from './usePractice'
 
 interface Props {
@@ -184,7 +185,7 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 pb-10">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold">Tab Fácil</h1>
@@ -320,30 +321,19 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
         </Card>
       </div>
 
-      <Card title="Controles">
+      <Card title="Reprodução">
         <Controls
-          index={currentIndex}
-          total={tab.events.length}
           visiblePosition={visiblePosition + 1}
           visibleTotal={visible.length}
-          playing={playing}
-          speed={saved.speed}
           loopEnabled={saved.loopEnabled}
           loopStart={saved.loopStart}
           loopEnd={saved.loopEnd}
           countIn={prefs.countIn}
           stringFilter={stringFilter}
-          canPrev={visiblePosition > 0}
-          canNext={visiblePosition < visible.length - 1}
-          onPrev={goPrev}
-          onNext={goNext}
-          onPlayEvent={() => void playCurrent()}
-          onTogglePlay={togglePlay}
           onRestart={() => {
             stopPlayback()
             dispatch({ type: 'setIndex', index: visible[0] ?? 0 })
           }}
-          onSpeed={(speed) => dispatch({ type: 'setSpeed', speed })}
           onToggleLoop={() => dispatch({ type: 'toggleLoop' })}
           onSetLoopStart={() => dispatch({ type: 'setLoopStart' })}
           onSetLoopEnd={() => dispatch({ type: 'setLoopEnd' })}
@@ -428,6 +418,20 @@ export function PlayerScreen({ tab, saved, state, dispatch, onClearAll }: Props)
           Apagar dados salvos
         </Button>
       </div>
+
+      <TransportBar
+        index={currentIndex}
+        total={tab.events.length}
+        playing={playing}
+        speed={saved.speed}
+        canPrev={visiblePosition > 0}
+        canNext={visiblePosition < visible.length - 1}
+        onPrev={goPrev}
+        onNext={goNext}
+        onPlayEvent={() => void playCurrent()}
+        onTogglePlay={togglePlay}
+        onSpeed={(speed) => dispatch({ type: 'setSpeed', speed })}
+      />
     </div>
   )
 }
